@@ -25,15 +25,15 @@ jobs:
         uses: actions/checkout@v4
       - name: Preparar site estático
         run: |
-          mkdir site
-          cd radar_uber_v04_pronto_github_pages/radar_uber_v04
-          cp index.html style.css src.js site/ 2>/dev/null || true
           mkdir -p "$GITHUB_WORKSPACE/site"
+          cd radar_uber_v04_pronto_github_pages/radar_uber_v04
           cp index.html style.css src.js "$GITHUB_WORKSPACE/site/"
           cp public/* "$GITHUB_WORKSPACE/site/"
           touch "$GITHUB_WORKSPACE/site/.nojekyll"
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Enviar arquivos do site
         uses: actions/upload-pages-artifact@v3
         with:
