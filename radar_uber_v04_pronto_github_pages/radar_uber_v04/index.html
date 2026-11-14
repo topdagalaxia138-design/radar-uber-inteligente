@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b1422">
+  <meta name="description" content="Radar Uber Inteligente: metas, jornada e resultado líquido estimado.">
+  <link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./style.css">
+  <title>Radar Uber • Painel</title>
+</head>
+<body>
+<main class="app">
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">R</div><div><span class="eyebrow">MOBILIDADE QUE GERA DINHEIRO</span><h1>Radar Uber</h1><p id="dailyDate" class="date"></p></div></div>
+    <span class="status" id="status">Parado</span>
+  </header>
+
+  <section class="hero">
+    <div class="hero-label">META DE RECEBIMENTO</div>
+    <div class="target" id="target">R$ 152,50</div>
+    <div class="progress"><div id="progressFill"></div></div>
+    <div class="progress-row"><span id="receivedLabel">R$ 0,00 recebido</span><strong id="progressLabel">0%</strong></div>
+    <div class="goal-row"><span>Falta <strong id="remaining">R$ 152,50</strong></span><span id="goalMessage">Meta ainda não atingida.</span></div>
+  </section>
+
+  <section class="net-card">
+    <div><span class="eyebrow">SALDO LÍQUIDO ESTIMADO</span><div id="net" class="net-value">—</div><p id="netHint" class="net-hint">Inicie o expediente para calcular o saldo do dia.</p></div>
+    <div class="net-tag">ANTES DE OUTRAS DESPESAS</div>
+  </section>
+
+  <section class="stats-grid" aria-label="Indicadores">
+    <article class="stat"><span class="stat-icon">⌖</span><div><small>QUILÔMETROS</small><strong id="km">0,0 km</strong><em id="kmHint">Limite: 150 km</em></div></article>
+    <article class="stat"><span class="stat-icon">◷</span><div><small>TEMPO</small><strong id="hours">0h 00min</strong><em id="hoursHint">Meta: 5h</em></div></article>
+    <article class="stat"><span class="stat-icon">⛽</span><div><small>COMBUSTÍVEL</small><strong id="fuel">R$ 0,00</strong><em>Estimado pelo GPS</em></div></article>
+    <article class="stat"><span class="stat-icon">▣</span><div><small>ALUGUEL / DIA</small><strong id="rent">R$ 119,17</strong><em>Rateio médio</em></div></article>
+  </section>
+
+  <section class="controls">
+    <button id="startBtn" class="start"><span>▶</span> INICIAR EXPEDIENTE</button>
+    <button id="stopBtn" class="stop" disabled><span>■</span> ENCERRAR EXPEDIENTE</button>
+    <p id="gpsMessage" class="message" aria-live="polite">Aguardando início. A localização será solicitada quando você iniciar.</p>
+  </section>
+
+  <section class="breakdown">
+    <div class="breakdown-head"><h2>Resumo financeiro</h2><span>HOJE</span></div>
+    <div class="line"><span>Recebimento informado</span><strong id="breakReceived">R$ 0,00</strong></div>
+    <div class="line"><span>Combustível estimado</span><strong id="breakFuel">R$ 0,00</strong></div>
+    <div class="line"><span>Aluguel rateado</span><strong id="breakRent">R$ 119,17</strong></div>
+    <div class="line"><span>Meta pessoal diária</span><strong id="personalDaily">R$ 33,33</strong></div>
+    <div class="line total"><span>Saldo após esses custos</span><strong id="breakNet">Aguardando início</strong></div>
+    <p class="disclaimer">Estimativa. Ainda não desconta manutenção, lavagem, alimentação, impostos e outras despesas.</p>
+  </section>
+
+  <details class="fold">
+    <summary>Fechamento diário <span>+</span></summary>
+    <div class="fold-content">
+      <p class="muted">Informe uma única vez o total recebido no dia. Não precisa lançar corrida por corrida.</p>
+      <div class="entry"><label for="earnings">Total recebido da Uber (R$)</label><input id="earnings" type="text" inputmode="decimal" autocomplete="off" placeholder="Ex.: 194,50"><button id="saveEarnings" class="save">SALVAR RECEBIMENTO</button><p id="earningsMessage" class="message"></p></div>
+      <p class="note">A importação automática depende de aprovação e autorização da API oficial da Uber. Esta versão ainda não está conectada à sua conta.</p>
+    </div>
+  </details>
+
+  <details class="fold">
+    <summary>Histórico recente <span>+</span></summary>
+    <div class="fold-content">
+      <button id="exportBtn" class="export">↓ Exportar histórico CSV</button>
+      <div class="table-wrap"><table><thead><tr><th>Data</th><th>Km</th><th>Tempo</th><th>Recebido</th><th>Saldo</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+      <p class="note">Os registros ficam neste navegador e aparelho. Exporte o CSV para manter uma cópia.</p>
+    </div>
+  </details>
+
+  <details class="fold">
+    <summary>Configurações do negócio <span>+</span></summary>
+    <div class="fold-content">
+      <div class="settings-grid">
+        <div class="field"><label for="weeklyRent">Aluguel semanal (R$)</label><input id="weeklyRent" type="number" min="0" step="0.01"></div>
+        <div class="field"><label for="ethanolPrice">Etanol por litro (R$)</label><input id="ethanolPrice" type="number" min="0" step="0.01"></div>
+        <div class="field"><label for="kmPerLiter">Consumo (km/L)</label><input id="kmPerLiter" type="number" min="0.1" step="0.1"></div>
+        <div class="field"><label for="monthlyGoal">Meta pessoal mensal (R$)</label><input id="monthlyGoal" type="number" min="0" step="0.01"></div>
+        <div class="field"><label for="maxKm">Limite planejado (km/dia)</label><input id="maxKm" type="number" min="1" step="1"></div>
+        <div class="field"><label for="dailyHours">Jornada (horas/dia)</label><input id="dailyHours" type="number" min="0.5" max="24" step="0.5"></div>
+        <div class="field"><label for="daysPerWeek">Dias por semana</label><input id="daysPerWeek" type="number" min="1" max="7" step="1"></div>
+      </div>
+      <div class="settings-summary"><div><small>Combustível / km</small><strong id="fuelPerKm">R$ 0,28/km</strong></div><div><small>Aluguel / dia</small><strong id="rentPerDay">R$ 119,17</strong></div><div><small>Meta pessoal / dia</small><strong id="personalPerDay">R$ 33,33</strong></div></div>
+      <button id="saveSettings" class="save">SALVAR PARÂMETROS</button><p id="settingsMessage" class="message"></p>
+    </div>
+  </details>
+  <footer>Radar Uber Inteligente • versão 0.4 • ferramenta independente, não afiliada à Uber.</footer>
+</main>
+<script type="module" src="./src.js"></script>
+</body></html>

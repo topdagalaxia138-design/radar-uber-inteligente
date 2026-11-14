@@ -1,0 +1,21 @@
+RADAR UBER INTELIGENTE — VERSÃO 0.4 CORRIGIDA PARA PUBLICAÇÃO
+
+Este é o painel de controle de ganhos do motorista Uber, não o projeto Radar Uber Eats.
+
+PUBLICAÇÃO
+O projeto está preparado para GitHub Pages com HTTPS. Consulte README.md. Envie todos os arquivos desta pasta, inclusive .github/workflows/deploy.yml, para a branch main. Depois selecione GitHub Actions em Settings > Pages. O workflow publicará o site automaticamente.
+
+EXECUÇÃO LOCAL
+1. Extraia a pasta radar_uber_v04.
+2. Abra a pasta no VS Code.
+3. Execute npm install.
+4. Execute npm run dev.
+
+DADOS
+A chave localStorage "radar-uber-v02" foi mantida no código. Porém, o navegador separa os dados por endereço: os dados de localhost não aparecem automaticamente no endereço github.io. Exporte e guarde o histórico CSV antes de migrar. Confira também os parâmetros nas Configurações.
+
+GPS
+O GPS do iPhone exige HTTPS ou localhost e autorização de localização no navegador. O GitHub Pages fornece HTTPS. O GPS pode pausar quando o navegador fica em segundo plano; confira a quilometragem pelo odômetro.
+
+FINANCEIRO
+O recebimento é informado manualmente; não há conexão com a API da Uber. O saldo desconta aluguel rateado e combustível estimado, mas ainda não inclui manutenção, lavagem, alimentação, impostos e outras despesas.
