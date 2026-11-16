@@ -28,7 +28,7 @@ enum RadarOfferParser {
     // Conservative first-pass parser. Real offer layouts must be validated and tuned.
     static func parse(_ text: String) -> RadarParseResult {
         let normalized = text
-            .replacingOccurrences(of: "\\u{00A0}", with: " ")
+            .replacingOccurrences(of: "\u{00A0}", with: " ")
             .replacingOccurrences(of: ",", with: ".")
         let lines = normalized.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -39,6 +39,10 @@ enum RadarOfferParser {
             return .incomplete("Não consegui identificar o valor da oferta.")
         }
 
+        let farePattern = try! NSRegularExpression(pattern: #"R\$\s*(\d{1,4}(?:\.\d{2})?)"#)
+        guard farePattern.numberOfMatches(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)) == 1 else {
+            return .incomplete("Mais de um valor na tela; oferta ambígua.")
+        }
         let pickupLine = lines.first { line in
             line.localizedCaseInsensitiveContains("buscar")
             || line.localizedCaseInsensitiveContains("embarque")
@@ -82,6 +86,10 @@ struct RadarDecisionSettings {
     let fuelCostPerKilometer: Double
     let targetNetPerHour: Double
     let preferredMinimumFare: Double
+    var repositionKilometers: Double = 0
+    var repositionMinutes: Double = 0
+    var idleMinutes: Double = 0
+    var exceptionalMultiplier: Double = 1.5
 }
 
 enum RadarDecision {
@@ -99,16 +107,29 @@ enum RadarDecisionEngine {
             return .insufficient(reason: "Dados ou meta líquida por hora ainda não configurados.")
         }
 
-        let fuel = kilometers * settings.fuelCostPerKilometer
+        guard offer.fare.isFinite, minutes.isFinite, kilometers.isFinite,
+              settings.fuelCostPerKilometer.isFinite, settings.targetNetPerHour.isFinite,
+              settings.repositionKilometers.isFinite, settings.repositionKilometers >= 0,
+              settings.repositionMinutes.isFinite, settings.repositionMinutes >= 0,
+              settings.idleMinutes.isFinite, settings.idleMinutes >= 0,
+              settings.preferredMinimumFare.isFinite, settings.preferredMinimumFare > 0,
+              settings.exceptionalMultiplier.isFinite, settings.exceptionalMultiplier >= 1 else {
+            return .insufficient(reason: "Parâmetros inválidos.")
+        }
+        let fuel = (kilometers + settings.repositionKilometers) * settings.fuelCostPerKilometer
         let net = offer.fare - fuel
-        let netPerHour = net / (minutes / 60)
+        let netPerHour = net / ((minutes + settings.repositionMinutes) / 60)
 
         guard net > 0 else {
             return .reject(reason: "O combustível estimado consome o valor da corrida.", estimatedNet: net, netPerHour: netPerHour)
         }
 
-        if netPerHour >= settings.targetNetPerHour {
-            let note = offer.fare >= settings.preferredMinimumFare
+        let threshold = offer.fare < settings.preferredMinimumFare
+            ? settings.targetNetPerHour * settings.exceptionalMultiplier
+            : settings.targetNetPerHour
+        if netPerHour >= threshold {
+            let special = offer.fare >= max(50, settings.preferredMinimumFare * 2) && settings.idleMinutes >= 10
+            let note = special ? "Oportunidade de valor elevado após ociosidade; rentabilidade acima da meta." : offer.fare >= settings.preferredMinimumFare
                 ? "Lucro por hora acima da sua meta."
                 : "Abaixo de R$ 25, mas com rentabilidade excepcional."
             return .accept(reason: note, estimatedNet: net, netPerHour: netPerHour)

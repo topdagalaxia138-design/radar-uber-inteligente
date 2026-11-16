@@ -4,8 +4,8 @@ import UserNotifications
 
 final class SampleHandler: RPBroadcastSampleHandler {
     private let request = VNRecognizeTextRequest()
-    private var lastNotificationKey = ""
-    private var lastNotificationAt = Date.distantPast
+    private var gate = RadarOfferGate()
+    private var lastFrameAt = ProcessInfo.processInfo.systemUptime
 
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
         request.recognitionLevel = .fast
@@ -19,9 +19,11 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
         guard sampleBufferType == .video,
-              Date().timeIntervalSince(lastNotificationAt) > 0.35,
+              ProcessInfo.processInfo.systemUptime - lastFrameAt >= 0.5,
               let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
+        lastFrameAt = ProcessInfo.processInfo.systemUptime
+        let startedAt = lastFrameAt
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer)
         do {
             try handler.perform([request])
@@ -33,22 +35,23 @@ final class SampleHandler: RPBroadcastSampleHandler {
             case .incomplete:
                 return
             case .complete(let offer):
-                let key = recognizedText
-                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-                    .lowercased()
-                guard key != lastNotificationKey else { return }
-                lastNotificationKey = key
-                lastNotificationAt = Date()
-
                 let defaults = UserDefaults(suiteName: "group.br.com.radaruber.app")
                 let fuelCost = defaults?.double(forKey: "fuelCostPerKm") ?? 0.28
                 let target = defaults?.double(forKey: "targetNetPerHour") ?? 0
-                let settings = RadarDecisionSettings(
+                var settings = RadarDecisionSettings(
                     fuelCostPerKilometer: fuelCost > 0 ? fuelCost : 0.28,
                     targetNetPerHour: target,
                     preferredMinimumFare: 25
                 )
-                deliver(RadarDecisionEngine.evaluate(offer, settings: settings))
+                settings.idleMinutes = max(0, defaults?.double(forKey: "confirmedIdleMinutes") ?? 0)
+                let decision = RadarDecisionEngine.evaluate(offer, settings: settings)
+                let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
+                defaults?.set(elapsed, forKey: "lastProcessingSeconds")
+                defaults?.set(Date().timeIntervalSince1970, forKey: "lastOfferAt")
+                guard elapsed < 7 else { return }
+                if case .accept = decision, gate.shouldDeliver(offer, now: Date()) {
+                    deliver(decision)
+                }
             }
         } catch {
             // OCR failure is silent; never invent offer data.
@@ -74,6 +77,11 @@ final class SampleHandler: RPBroadcastSampleHandler {
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(notification)
+        UNUserNotificationCenter.current().add(notification) { error in
+            UserDefaults(suiteName: "group.br.com.radaruber.app")?.set(
+                error?.localizedDescription ?? "Agendada; entrega depende do iOS",
+                forKey: "lastNotificationStatus"
+            )
+        }
     }
 }

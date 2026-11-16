@@ -15,7 +15,7 @@ targets:
     platform: iOS
     sources:
       - path: App
-      - path: Shared/RadarOfferParser.swift
+      - path: Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: br.com.radaruber.app
@@ -30,7 +30,7 @@ targets:
     platform: iOS
     sources:
       - path: Broadcast
-      - path: Shared/RadarOfferParser.swift
+      - path: Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: br.com.radaruber.app.broadcast

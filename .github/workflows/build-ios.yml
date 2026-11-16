@@ -21,5 +21,16 @@ jobs:
         run: brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate --spec radar-ios/project.yml --project radar-ios
+      - name: Test decision, parsing and financial core
+        working-directory: radar-ios
+        run: swift test
       - name: Build for iOS Simulator
         run: xcodebuild -project radar-ios/RadarUber.xcodeproj -scheme RadarUber -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Build for physical iPhone without signing
+        run: xcodebuild -project radar-ios/RadarUber.xcodeproj -scheme RadarUber -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device CODE_SIGNING_ALLOWED=NO build
+      - name: Preserve unsigned device build for signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: RadarUber-unsigned-device
+          path: build/device/Build/Products/Debug-iphoneos/
+          if-no-files-found: error

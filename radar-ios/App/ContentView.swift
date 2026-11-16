@@ -8,10 +8,15 @@ struct ContentView: View {
     private var fuelCostPerKm = 0.28
     @AppStorage("targetNetPerHour", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
     private var targetNetPerHour = 0.0
+    @AppStorage("lastProcessingSeconds", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    private var lastProcessingSeconds = 0.0
+    @AppStorage("lastNotificationStatus", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    private var lastNotificationStatus = "Nenhuma notificação agendada"
     @State private var notificationStatus = "Verificando autorização…"
 
     var body: some View {
         NavigationStack {
+            ScrollView {
             VStack(spacing: 18) {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .font(.system(size: 46))
@@ -64,9 +69,15 @@ struct ContentView: View {
                     .padding()
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
+                Text(lastProcessingSeconds > 0 ? String(format: "Último processamento: %.2f s (OCR + decisão)", lastProcessingSeconds) : "Aguardando oferta legível")
+                    .font(.caption)
+                Text(lastNotificationStatus).font(.caption)
+                Text("Tempo desde a aparição da oferta e entrega da notificação ainda precisam ser medidos no iPhone. Finanças automáticas e Zarp Super ainda sem fonte conectada.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Spacer()
             }
             .padding()
+            }
             .navigationTitle("Radar")
             .navigationBarTitleDisplayMode(.inline)
             .task { await refreshNotificationStatus() }
