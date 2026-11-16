@@ -95,11 +95,17 @@ function onPosition(pos){
 }
 function onError(err){const messages={1:'Permissão de localização negada. Autorize a localização para este site nas configurações do navegador.',2:'Localização indisponível. Verifique o GPS e tente novamente.',3:'O GPS demorou para responder. Tente novamente.'};$('gpsMessage').textContent=messages[err.code]||'Não foi possível obter a localização.';}
 function startTracking(){
-  if(!navigator.geolocation){$('gpsMessage').textContent='Este navegador não oferece geolocalização.';return false;}
-  if(!window.isSecureContext){$('gpsMessage').textContent='O GPS exige HTTPS ou localhost.';return false;}
-  lastPoint=null;
-  watchId=navigator.geolocation.watchPosition(onPosition,onError,{enableHighAccuracy:true,maximumAge:2000,timeout:15000});
-  timer=setInterval(()=>{archiveIfNewDay();if(active&&elapsed()>=settings.dailyHours*3600000){if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;active=false;elapsedBefore=settings.dailyHours*3600000;startAt=null;lastPoint=null;clearInterval(timer);timer=null;$('gpsMessage').textContent='Limite máximo da jornada atingido. O expediente foi encerrado automaticamente.';}saveState();render();},1000);
+  // O relógio do expediente não pode depender do GPS.
+  if(timer===null){
+    timer=setInterval(()=>{archiveIfNewDay();if(active&&elapsed()>=settings.dailyHours*3600000){if(watchId!==null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);watchId=null;active=false;elapsedBefore=settings.dailyHours*3600000;startAt=null;lastPoint=null;clearInterval(timer);timer=null;$('gpsMessage').textContent='Limite máximo da jornada atingido. O expediente foi encerrado automaticamente.';}saveState();render();},1000);
+  }
+  if(!navigator.geolocation){$('gpsMessage').textContent='Expediente ativo, mas este navegador não oferece geolocalização. O tempo continuará sendo contado.';return true;}
+  if(!window.isSecureContext){$('gpsMessage').textContent='Expediente ativo. O GPS exige HTTPS ou localhost; o tempo continuará sendo contado.';return true;}
+  if(watchId===null){
+    lastPoint=null;
+    try{watchId=navigator.geolocation.watchPosition(onPosition,onError,{enableHighAccuracy:true,maximumAge:2000,timeout:15000});}
+    catch{$('gpsMessage').textContent='Expediente ativo, mas não foi possível iniciar o GPS. O tempo continuará sendo contado.';}
+  }
   return true;
 }
 $('startBtn').addEventListener('click',()=>{
@@ -121,55 +127,7 @@ $('saveSettings').addEventListener('click',()=>{
 });
 $('exportBtn').addEventListener('click',()=>{
   const rows=[...state.history,{...state.current,date:localDateKey(),km,elapsedMs:elapsed(),earnings,settingsSnapshot:snapshot()}].filter((item,i,all)=>all.findIndex(x=>x.date===item.date)===i).sort((a,b)=>a.date.localeCompare(b.date));
-  const csv=[['Data','Quilometros','Tempo_minutos','Recebido_R...rows.map(x=>{const s=readSettings(x.settingsSnapshot||settings),c=costs(s);return [x.date,number(x.km).toFixed(2).replace('.',','),Math.round(number(x.elapsedMs)/60000),number(x.earnings).toFixed(2).replace('.',','),'0,00',(number(x.km)*c.fuelPerKm).toFixed(2).replace('.',','),dayNet(x)===null?'':dayNet(x).toFixed(2).replace('.',',')].join(';');})].join('\n');
-  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='radar-uber-historico.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-});
-window.addEventListener('pagehide',()=>{if(active)saveState();});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&active)saveState();else if(document.visibilityState==='visible'&&active){lastPoint=null;$('gpsMessage').textContent='Página voltou ao primeiro plano. O GPS está retomando; confira o odômetro para cobrir eventuais pausas.';saveState();}});
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
-if(active){
-  $('gpsMessage').textContent='Expediente recuperado automaticamente. O tempo foi preservado; o GPS está reconectando. Confira o odômetro para cobrir eventual pausa do navegador.';
-  startTracking();
-  saveState();
-}
-renderSettings();render();
-,'Aluguel_rateado_R...rows.map(x=>{const s=readSettings(x.settingsSnapshot||settings),c=costs(s);return [x.date,number(x.km).toFixed(2).replace('.',','),Math.round(number(x.elapsedMs)/60000),number(x.earnings).toFixed(2).replace('.',','),c.rentPerDay.toFixed(2).replace('.',','),(number(x.km)*c.fuelPerKm).toFixed(2).replace('.',','),dayNet(x)===null?'':dayNet(x).toFixed(2).replace('.',',')].join(';');})].join('\n');
-  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='radar-uber-historico.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-});
-window.addEventListener('pagehide',()=>{if(active)saveState();});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&active)saveState();else if(document.visibilityState==='visible'&&active){lastPoint=null;$('gpsMessage').textContent='Página voltou ao primeiro plano. O GPS está retomando; confira o odômetro para cobrir eventuais pausas.';saveState();}});
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
-if(active){
-  $('gpsMessage').textContent='Expediente recuperado automaticamente. O tempo foi preservado; o GPS está reconectando. Confira o odômetro para cobrir eventual pausa do navegador.';
-  startTracking();
-  saveState();
-}
-renderSettings();render();
-,'Combustivel_estimado_R...rows.map(x=>{const s=readSettings(x.settingsSnapshot||settings),c=costs(s);return [x.date,number(x.km).toFixed(2).replace('.',','),Math.round(number(x.elapsedMs)/60000),number(x.earnings).toFixed(2).replace('.',','),c.rentPerDay.toFixed(2).replace('.',','),(number(x.km)*c.fuelPerKm).toFixed(2).replace('.',','),dayNet(x)===null?'':dayNet(x).toFixed(2).replace('.',',')].join(';');})].join('\n');
-  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='radar-uber-historico.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-});
-window.addEventListener('pagehide',()=>{if(active)saveState();});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&active)saveState();else if(document.visibilityState==='visible'&&active){lastPoint=null;$('gpsMessage').textContent='Página voltou ao primeiro plano. O GPS está retomando; confira o odômetro para cobrir eventuais pausas.';saveState();}});
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
-if(active){
-  $('gpsMessage').textContent='Expediente recuperado automaticamente. O tempo foi preservado; o GPS está reconectando. Confira o odômetro para cobrir eventual pausa do navegador.';
-  startTracking();
-  saveState();
-}
-renderSettings();render();
-,'Saldo_estimado_R...rows.map(x=>{const s=readSettings(x.settingsSnapshot||settings),c=costs(s);return [x.date,number(x.km).toFixed(2).replace('.',','),Math.round(number(x.elapsedMs)/60000),number(x.earnings).toFixed(2).replace('.',','),c.rentPerDay.toFixed(2).replace('.',','),(number(x.km)*c.fuelPerKm).toFixed(2).replace('.',','),dayNet(x)===null?'':dayNet(x).toFixed(2).replace('.',',')].join(';');})].join('\n');
-  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='radar-uber-historico.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-});
-window.addEventListener('pagehide',()=>{if(active)saveState();});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&active)saveState();else if(document.visibilityState==='visible'&&active){lastPoint=null;$('gpsMessage').textContent='Página voltou ao primeiro plano. O GPS está retomando; confira o odômetro para cobrir eventuais pausas.';saveState();}});
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
-if(active){
-  $('gpsMessage').textContent='Expediente recuperado automaticamente. O tempo foi preservado; o GPS está reconectando. Confira o odômetro para cobrir eventual pausa do navegador.';
-  startTracking();
-  saveState();
-}
-renderSettings();render();
-].join(';'),...rows.map(x=>{const s=readSettings(x.settingsSnapshot||settings),c=costs(s);return [x.date,number(x.km).toFixed(2).replace('.',','),Math.round(number(x.elapsedMs)/60000),number(x.earnings).toFixed(2).replace('.',','),c.rentPerDay.toFixed(2).replace('.',','),(number(x.km)*c.fuelPerKm).toFixed(2).replace('.',','),dayNet(x)===null?'':dayNet(x).toFixed(2).replace('.',',')].join(';');})].join('\n');
+  const csv=[['Data','Quilometros','Tempo_minutos','Recebido_R$','Aluguel_rateado_R$','Combustivel_estimado_R$','Saldo_estimado_R$'].join(';'),...rows.map(x=>{const s=readSettings(x.settingsSnapshot||settings),c=costs(s);return [x.date,number(x.km).toFixed(2).replace('.',','),Math.round(number(x.elapsedMs)/60000),number(x.earnings).toFixed(2).replace('.',','),c.rentPerDay.toFixed(2).replace('.',','),(number(x.km)*c.fuelPerKm).toFixed(2).replace('.',','),dayNet(x)===null?'':dayNet(x).toFixed(2).replace('.',',')].join(';');})].join('\n');
   const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='radar-uber-historico.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 window.addEventListener('pagehide',()=>{if(active)saveState();});
