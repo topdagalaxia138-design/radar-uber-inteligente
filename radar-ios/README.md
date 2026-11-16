@@ -65,3 +65,9 @@ A compilação ocorre em runner macOS do GitHub Actions. Para distribuição via
 ### Validação física pendente
 
 Após assinatura e instalação: autorizar notificações, iniciar Radar Leitura e abrir ofertas em ambiente de teste com veículo parado. Registrar instante em que a oferta aparece e instante do alerta, taxa de leitura incorreta, ofertas perdidas e consumo/memória da extensão. Exigir ausência de alertas para ofertas rejeitadas e dados incompletos. Medir p50/p95/máximo fim a fim; `lastProcessingSeconds` mede apenas OCR + decisão e não comprova a meta de sete segundos.
+
+## Histórico adaptativo local
+
+O Broadcast agora mantém até 500 observações legíveis por sete dias, sem guardar texto de tela, endereços ou imagens. Após 20 observações, o percentil 60 das taxas após combustível pode elevar o filtro até 25% acima da meta configurada. Nunca reduz a meta. Uma oferta repetida não gera outra observação dentro da janela de deduplicação. O filtro da oferta atual usa somente observações anteriores.
+
+Esse aprendizado usa ofertas observadas: não identifica corridas aceitas, não registra ganhos e não aprende tempos reais de viagens. Esses resultados continuam dependendo de uma fonte de viagens concluídas. A tela informa quantidade observada e filtro aplicado. Falhas de OCR são registradas no diagnóstico sem gerar alertas para o motorista.

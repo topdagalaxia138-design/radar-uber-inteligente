@@ -56,3 +56,39 @@ final class RadarCoreTests: XCTestCase {
         XCTAssertEqual(ledger.tripsToMinimumBenefit, 78)
     }
 }
+
+final class RadarAdaptiveHistoryTests: XCTestCase {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    func sample(_ fare: Double) -> RadarOffer {
+        RadarOffer(fare: fare, pickupMinutes: 5, tripMinutes: 25,
+                   pickupKilometers: 2, tripKilometers: 8, rawText: "")
+    }
+    func testColdStartKeepsConfiguredFloor() {
+        var history = RadarAdaptiveHistory()
+        for _ in 0..<19 { history.observe(sample(100), fuelPerKm: 0.28, now: date) }
+        XCTAssertEqual(history.target(base: 40, now: date), 40)
+    }
+    func testGoodOfferHistoryRaisesThresholdWithinBound() {
+        var history = RadarAdaptiveHistory()
+        for _ in 0..<20 { history.observe(sample(100), fuelPerKm: 0.28, now: date) }
+        XCTAssertEqual(history.target(base: 40, now: date), 50)
+    }
+    func testPoorOffersNeverLowerFloor() {
+        var history = RadarAdaptiveHistory()
+        for _ in 0..<25 { history.observe(sample(10), fuelPerKm: 0.28, now: date) }
+        XCTAssertEqual(history.target(base: 40, now: date), 40)
+    }
+    func testExpiredHistoryCannotChangeThreshold() {
+        var history = RadarAdaptiveHistory()
+        for _ in 0..<20 { history.observe(sample(100), fuelPerKm: 0.28, now: date) }
+        XCTAssertEqual(history.target(base: 40, now: date.addingTimeInterval(8 * 86400)), 40)
+    }
+    func testPersistenceAndBoundedHistory() throws {
+        var history = RadarAdaptiveHistory()
+        for _ in 0..<510 { history.observe(sample(100), fuelPerKm: 0.28, now: date) }
+        let saved = try JSONEncoder().encode(history)
+        let restored = try JSONDecoder().decode(RadarAdaptiveHistory.self, from: saved)
+        XCTAssertEqual(restored.samples.count, 500)
+        XCTAssertEqual(restored.target(base: 40, now: date), 50)
+    }
+}

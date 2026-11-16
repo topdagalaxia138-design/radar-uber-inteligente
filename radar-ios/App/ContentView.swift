@@ -12,6 +12,12 @@ struct ContentView: View {
     private var lastProcessingSeconds = 0.0
     @AppStorage("lastNotificationStatus", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
     private var lastNotificationStatus = "Nenhuma notificação agendada"
+    @AppStorage("observedOfferCount", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    private var observedOfferCount = 0
+    @AppStorage("adaptiveTarget", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    private var adaptiveTarget = 0.0
+    @AppStorage("lastReadStatus", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    private var lastReadStatus = "Nenhuma leitura realizada"
     @State private var notificationStatus = "Verificando autorização…"
 
     var body: some View {
@@ -72,6 +78,16 @@ struct ContentView: View {
                 Text(lastProcessingSeconds > 0 ? String(format: "Último processamento: %.2f s (OCR + decisão)", lastProcessingSeconds) : "Aguardando oferta legível")
                     .font(.caption)
                 Text(lastNotificationStatus).font(.caption)
+                Text(lastReadStatus).font(.caption)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Aprendizado de ofertas").font(.headline)
+                    Text("\(observedOfferCount) ofertas legíveis no histórico local")
+                    if adaptiveTarget > 0 {
+                        Text(String(format: "Filtro atual: R$ %.2f/h após combustível", adaptiveTarget))
+                    }
+                    Text("Após 20 ofertas, o filtro pode subir até 25% acima da sua meta. Nunca reduz sua meta. Esse histórico não confirma corridas realizadas nem ganhos.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }.padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 Text("Tempo desde a aparição da oferta e entrega da notificação ainda precisam ser medidos no iPhone. Finanças automáticas e Zarp Super ainda sem fonte conectada.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
