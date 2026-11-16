@@ -19,9 +19,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: br.com.radaruber.app
+        INFOPLIST_FILE: App/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Radar Uber
-        INFOPLIST_KEY_NSCameraUsageDescription: "Não usamos a câmera para ler ofertas."
-        INFOPLIST_KEY_NSUserNotificationsUsageDescription: "O Radar avisa quando uma oferta da Uber merece atenção."
         CODE_SIGN_ENTITLEMENTS: App/RadarUber.entitlements
     dependencies:
       - target: RadarBroadcast
