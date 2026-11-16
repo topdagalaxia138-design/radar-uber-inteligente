@@ -14,7 +14,7 @@ const readSettings = (obj={}) => ({
   dailyHours: Math.min(6, Math.max(0.5, number(obj.dailyHours, DEFAULTS.dailyHours) || DEFAULTS.dailyHours)),
   daysPerWeek: Math.min(7, Math.max(1, Math.round(number(obj.daysPerWeek, DEFAULTS.daysPerWeek) || DEFAULTS.daysPerWeek)))
 });
-const costs = (settings) => ({ fuelPerKm: settings.ethanolPrice/settings.kmPerLiter, rentPerDay: 0, personalPerDay: settings.monthlyGoal/30 });
+const costs = (settings) => ({ fuelPerKm: settings.ethanolPrice/settings.kmPerLiter, rentPerDay: settings.weeklyRent*52/12/30, personalPerDay: settings.monthlyGoal/30 });
 const freshDay = () => ({ date: localDateKey(), km:0, elapsedMs:0, earnings:0, hasStarted:false, sessionStartedAt:null, sessionActive:false, settingsSnapshot:null, updatedAt:new Date().toISOString() });
 function loadState(){
   try {
@@ -69,15 +69,15 @@ function renderHistory(){
 }
 function renderSettings(){
   $('weeklyRent').value=settings.weeklyRent;$('ethanolPrice').value=settings.ethanolPrice;$('kmPerLiter').value=settings.kmPerLiter;$('monthlyGoal').value=settings.monthlyGoal;$('maxKm').value=settings.maxKm;$('dailyHours').value=settings.dailyHours;$('daysPerWeek').value=settings.daysPerWeek;
-  const c=currentCosts();$('fuelPerKm').textContent=`${money(c.fuelPerKm)}/km`;$('rentPerDay').textContent='Controlado pela Uber';$('personalPerDay').textContent=money(c.personalPerDay);
+  const c=currentCosts();$('fuelPerKm').textContent=`${money(c.fuelPerKm)}/km`;$('rentPerDay').textContent=money(c.rentPerDay);$('personalPerDay').textContent=money(c.personalPerDay);
 }
 function render(){
   archiveIfNewDay();const c=currentCosts(),target=dailyTarget(),remaining=Math.max(0,target-earnings),pct=target>0?Math.min(100,earnings/target*100):0,net=netEstimate();
   $('target').textContent=money(target);$('remaining').textContent=money(remaining);$('receivedLabel').textContent=`${money(earnings)} recebido`;$('progressFill').style.width=`${pct}%`;$('progressLabel').textContent=`${Math.round(pct)}%`;
-  $('km').textContent=`${km.toFixed(1).replace('.',',')} km`;$('hours').textContent=fmtTime(elapsed());$('fuel').textContent=money(fuelCost());$('rent').textContent='Uber';$('personalDaily').textContent=money(c.personalPerDay);
+  $('km').textContent=`${km.toFixed(1).replace('.',',')} km`;$('hours').textContent=fmtTime(elapsed());$('fuel').textContent=money(fuelCost());$('rent').textContent=money(c.rentPerDay);$('personalDaily').textContent=money(c.personalPerDay);
   $('kmHint').textContent=km>=settings.maxKm?`Limite planejado de ${settings.maxKm} km atingido`:`Limite planejado: ${settings.maxKm} km`;
   $('hoursHint').textContent=`Meta: ${String(settings.dailyHours).replace('.',',')}h por dia`;
-  $('net').textContent=net===null?'—':money(net);$('net').classList.toggle('negative',net!==null&&net<0);$('breakReceived').textContent=money(earnings);$('breakFuel').textContent=money(fuelCost());$('breakRent').textContent='Não duplicado';$('breakNet').textContent=net===null?'Aguardando início':money(net);$('breakNet').style.color=net!==null&&net<0?'#ff8990':net===null?'':'#62e4aa';
+  $('net').textContent=net===null?'—':money(net);$('net').classList.toggle('negative',net!==null&&net<0);$('breakReceived').textContent=money(earnings);$('breakFuel').textContent=money(fuelCost());$('breakRent').textContent=money(c.rentPerDay);$('breakNet').textContent=net===null?'Aguardando início':money(net);$('breakNet').style.color=net!==null&&net<0?'#ff8990':net===null?'':'#62e4aa';
   $('netHint').textContent=net===null?'Inicie o expediente para calcular o saldo do dia.':net>=c.personalPerDay?'Meta pessoal diária alcançada após aluguel e combustível.':net>=0?`Faltam ${money(c.personalPerDay-net)} para sua meta pessoal diária.`:'Saldo após descontar aluguel e combustível.';
   $('status').textContent=active?'Em expediente':'Parado';$('startBtn').disabled=active;$('stopBtn').disabled=!active;$('startBtn').textContent=active?'▶ EXPEDIENTE EM ANDAMENTO':'▶ INICIAR EXPEDIENTE';
   $('goalMessage').textContent=earnings>=target?'✓ Meta de recebimento atingida. Você pode encerrar quando quiser.':'Meta ainda não atingida.';$('goalMessage').classList.toggle('achieved',earnings>=target);
