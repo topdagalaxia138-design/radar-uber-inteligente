@@ -39,7 +39,7 @@ function loadState(){
 let state=loadState();
 let settings=state.settings;
 let km=state.current.km, earnings=state.current.earnings, elapsedBefore=state.current.elapsedMs, hasStarted=Boolean(state.current.hasStarted);
-let active=Boolean(state.current.sessionActive), startAt=active?Date.now():null, watchId=null, timer=null, lastPoint=null;
+let active=Boolean(state.current.sessionActive), startAt=active?(Number(state.current.sessionStartedAt)||Date.now()):null, watchId=null, timer=null, lastPoint=null;
 function elapsed(){return elapsedBefore+(active&&startAt?Date.now()-startAt:0);}
 function currentCosts(){return costs(settings);}
 function fuelCost(){return km*currentCosts().fuelPerKm;}
@@ -117,12 +117,7 @@ $('saveEarnings').addEventListener('click',()=>{
 $('saveSettings').addEventListener('click',()=>{
   const vals={weeklyRent:$('weeklyRent').value,ethanolPrice:$('ethanolPrice').value,kmPerLiter:$('kmPerLiter').value,monthlyGoal:$('monthlyGoal').value,maxKm:$('maxKm').value,dailyHours:$('dailyHours').value,daysPerWeek:$('daysPerWeek').value};
   if(Object.values(vals).some(v=>v===''||!Number.isFinite(Number(v)))||Number(vals.kmPerLiter)<=0||Number(vals.maxKm)<=0||Number(vals.dailyHours)<=0||Number(vals.daysPerWeek)<1||Number(vals.daysPerWeek)>7){$('settingsMessage').textContent='Confira os campos: informe números válidos e consumo maior que zero.';return;}
-  settings=readSettings(vals);state.settings=settings;saveState();if(active){
-  $('gpsMessage').textContent='Expediente anterior recuperado. O tempo foi preservado e o GPS está sendo reconectado. Confira o odômetro para cobrir eventual pausa do navegador.';
-  if(!startTracking()){$('gpsMessage').textContent+=' O expediente continua registrado, mas o GPS não pôde ser iniciado.';}
-  saveState();
-}
-renderSettings();render();$('settingsMessage').textContent='Parâmetros atualizados e salvos neste aparelho.';
+  settings=readSettings(vals);state.settings=settings;saveState();renderSettings();render();$('settingsMessage').textContent='Parâmetros atualizados e salvos neste aparelho.';
 });
 $('exportBtn').addEventListener('click',()=>{
   const rows=[...state.history,{...state.current,date:localDateKey(),km,elapsedMs:elapsed(),earnings,settingsSnapshot:snapshot()}].filter((item,i,all)=>all.findIndex(x=>x.date===item.date)===i).sort((a,b)=>a.date.localeCompare(b.date));
@@ -132,4 +127,9 @@ $('exportBtn').addEventListener('click',()=>{
 window.addEventListener('pagehide',()=>{if(active)saveState();});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&active)saveState();else if(document.visibilityState==='visible'&&active){lastPoint=null;$('gpsMessage').textContent='Página voltou ao primeiro plano. O GPS está retomando; confira o odômetro para cobrir eventuais pausas.';saveState();}});
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
+if(active){
+  $('gpsMessage').textContent='Expediente recuperado automaticamente. O tempo foi preservado; o GPS está reconectando. Confira o odômetro para cobrir eventual pausa do navegador.';
+  startTracking();
+  saveState();
+}
 renderSettings();render();
