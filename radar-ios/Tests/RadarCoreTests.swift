@@ -11,6 +11,14 @@ final class RadarCoreTests: XCTestCase {
         if case .accept = RadarDecisionEngine.evaluate(offer(), settings: settings) {} else { XCTFail() }
         if case .reject = RadarDecisionEngine.evaluate(offer(24), settings: settings) {} else { XCTFail() }
     }
+    func testMissingTargetNeverApproves() {
+        let settings = RadarDecisionSettings(fuelCostPerKilometer: 0.28, targetNetPerHour: 0, preferredMinimumFare: 25)
+        if case .insufficient = RadarDecisionEngine.evaluate(offer(), settings: settings) {} else { XCTFail() }
+    }
+    func testInvalidNumbersNeverApprove() {
+        let settings = RadarDecisionSettings(fuelCostPerKilometer: .nan, targetNetPerHour: 40, preferredMinimumFare: 25)
+        if case .insufficient = RadarDecisionEngine.evaluate(offer(), settings: settings) {} else { XCTFail() }
+    }
     func testRepositionCanMakeOfferUnprofitable() {
         var settings = RadarDecisionSettings(fuelCostPerKilometer: 0.28, targetNetPerHour: 40, preferredMinimumFare: 25)
         settings.repositionKilometers = 20
@@ -18,7 +26,7 @@ final class RadarCoreTests: XCTestCase {
         if case .reject = RadarDecisionEngine.evaluate(offer(), settings: settings) {} else { XCTFail() }
     }
     func testIncompleteAndAmbiguousScreensStaySilent() {
-        for text in ["R$ 43,00", "Saldo R$ 835,00", "R$ 25,00 buscar 2 min 1 km"] {
+        for text in ["R$ 43,00", "Saldo R$ 835,00", "R$ 25,00 buscar 2 min 1 km", "R$ 43,00 R$ 10,00\nbuscar 10 min 2 km\nviagem 20 min 10 km"] {
             if case .incomplete = RadarOfferParser.parse(text) {} else { XCTFail(text) }
         }
     }

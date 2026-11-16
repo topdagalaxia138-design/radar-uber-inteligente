@@ -65,7 +65,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         switch decision {
         case .accept(let reason, let net, let netHour):
             content.title = "RADAR • PEGAR"
-            content.subtitle = String(format: "Líquido estimado R$ %.2f • R$ %.2f/h", net, netHour)
+            content.subtitle = String(format: "Após combustível R$ %.2f • R$ %.2f/h", net, netHour)
             content.body = reason
         case .reject, .insufficient:
             // Rejected or incomplete offers stay silent by design.

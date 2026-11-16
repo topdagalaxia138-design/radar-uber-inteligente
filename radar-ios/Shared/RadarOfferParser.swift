@@ -128,8 +128,8 @@ enum RadarDecisionEngine {
             ? settings.targetNetPerHour * settings.exceptionalMultiplier
             : settings.targetNetPerHour
         if netPerHour >= threshold {
-            let special = offer.fare >= max(50, settings.preferredMinimumFare * 2) && settings.idleMinutes >= 10
-            let note = special ? "Oportunidade de valor elevado após ociosidade; rentabilidade acima da meta." : offer.fare >= settings.preferredMinimumFare
+            let special = offer.fare >= max(50, settings.preferredMinimumFare * 2)
+            let note = special ? (settings.idleMinutes >= 10 ? "Oportunidade de valor elevado após ociosidade; rentabilidade acima da meta." : "Oportunidade de valor elevado; rentabilidade acima da meta.") : offer.fare >= settings.preferredMinimumFare
                 ? "Lucro por hora acima da sua meta."
                 : "Abaixo de R$ 25, mas com rentabilidade excepcional."
             return .accept(reason: note, estimatedNet: net, netPerHour: netPerHour)
