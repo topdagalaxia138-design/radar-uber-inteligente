@@ -27,7 +27,7 @@ jobs:
         run: |
           mkdir -p "$GITHUB_WORKSPACE/site"
           cd radar_uber_v04_pronto_github_pages/radar_uber_v04
-          cp index.html style.css src.js "$GITHUB_WORKSPACE/site/"
+          cp index.html style.css src.js manifest.webmanifest sw.js "$GITHUB_WORKSPACE/site/"
           cp public/* "$GITHUB_WORKSPACE/site/"
           touch "$GITHUB_WORKSPACE/site/.nojekyll"
       - name: Configurar GitHub Pages
