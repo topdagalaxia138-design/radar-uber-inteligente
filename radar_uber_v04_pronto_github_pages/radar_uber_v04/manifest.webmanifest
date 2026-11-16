@@ -1,0 +1,12 @@
+{
+  "name": "Radar Uber Inteligente",
+  "short_name": "Radar Uber",
+  "description": "Painel de jornada e rentabilidade do motorista.",
+  "lang": "pt-BR",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#08111e",
+  "theme_color": "#0b1422",
+  "icons": []
+}
