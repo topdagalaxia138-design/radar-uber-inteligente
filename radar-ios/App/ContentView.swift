@@ -4,19 +4,19 @@ import UserNotifications
 import UIKit
 
 struct ContentView: View {
-    @AppStorage("fuelCostPerKm", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    @AppStorage("fuelCostPerKm", store: RadarEnvironment.sharedDefaults)
     private var fuelCostPerKm = 0.28
-    @AppStorage("targetNetPerHour", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    @AppStorage("targetNetPerHour", store: RadarEnvironment.sharedDefaults)
     private var targetNetPerHour = 0.0
-    @AppStorage("lastProcessingSeconds", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    @AppStorage("lastProcessingSeconds", store: RadarEnvironment.sharedDefaults)
     private var lastProcessingSeconds = 0.0
-    @AppStorage("lastNotificationStatus", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    @AppStorage("lastNotificationStatus", store: RadarEnvironment.sharedDefaults)
     private var lastNotificationStatus = "Nenhuma notificação agendada"
-    @AppStorage("observedOfferCount", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    @AppStorage("observedOfferCount", store: RadarEnvironment.sharedDefaults)
     private var observedOfferCount = 0
-    @AppStorage("adaptiveTarget", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    @AppStorage("adaptiveTarget", store: RadarEnvironment.sharedDefaults)
     private var adaptiveTarget = 0.0
-    @AppStorage("lastReadStatus", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    @AppStorage("lastReadStatus", store: RadarEnvironment.sharedDefaults)
     private var lastReadStatus = "Nenhuma leitura realizada"
     @State private var notificationStatus = "Verificando autorização…"
 
@@ -59,8 +59,13 @@ struct ContentView: View {
                 .padding()
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
+                if !RadarEnvironment.sharedContainerAvailable {
+                    Text("Permissão de compartilhamento ausente. A leitura não pode operar nesta instalação.")
+                        .foregroundStyle(.red).font(.footnote)
+                }
                 BroadcastPicker()
                     .frame(height: 52)
+                    .disabled(!RadarEnvironment.sharedContainerAvailable)
 
                 Text("Inicie a transmissão, selecione Radar Leitura e volte para a Uber. O iPhone mantém o indicador de transmissão visível.")
                     .font(.footnote)
@@ -112,7 +117,13 @@ struct ContentView: View {
 private struct BroadcastPicker: UIViewRepresentable {
     func makeUIView(context: Context) -> RPSystemBroadcastPickerView {
         let picker = RPSystemBroadcastPickerView(frame: .zero)
-        picker.preferredExtension = "br.com.radaruber.app.broadcast"
+        // Discover the actual signed extension ID instead of assuming the original ID.
+        if let plugins = Bundle.main.builtInPlugInsURL,
+           let urls = try? FileManager.default.contentsOfDirectory(at: plugins, includingPropertiesForKeys: nil) {
+            picker.preferredExtension = urls.compactMap { Bundle(url: $0) }.first {
+                ($0.infoDictionary?["NSExtension"] as? [String: Any])?["NSExtensionPointIdentifier"] as? String == "com.apple.broadcast-services-upload"
+            }?.bundleIdentifier
+        }
         picker.showsMicrophoneButton = false
         return picker
     }

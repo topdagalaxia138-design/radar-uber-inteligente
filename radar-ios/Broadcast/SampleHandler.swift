@@ -10,10 +10,16 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var lastFrameAt = ProcessInfo.processInfo.systemUptime
 
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
+        guard RadarEnvironment.sharedContainerAvailable else {
+            finishBroadcastWithError(NSError(domain: "Radar", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Sem acesso ao grupo compartilhado; revise a assinatura da instalação."
+            ]))
+            return
+        }
         request.recognitionLevel = .fast
         request.recognitionLanguages = ["pt-BR", "en-US"]
         request.usesLanguageCorrection = false
-        let defaults = UserDefaults(suiteName: "group.br.com.radaruber.app")
+        let defaults = RadarEnvironment.sharedDefaults
         if let data = defaults?.data(forKey: "observedRateHistory"),
            let saved = try? JSONDecoder().decode(RadarAdaptiveHistory.self, from: data) {
             history = saved
@@ -23,13 +29,13 @@ final class SampleHandler: RPBroadcastSampleHandler {
     }
 
     override func broadcastPaused() {
-        UserDefaults(suiteName: "group.br.com.radaruber.app")?.set(false, forKey: "broadcastActive")
+        RadarEnvironment.sharedDefaults?.set(false, forKey: "broadcastActive")
     }
     override func broadcastResumed() {
-        UserDefaults(suiteName: "group.br.com.radaruber.app")?.set(true, forKey: "broadcastActive")
+        RadarEnvironment.sharedDefaults?.set(true, forKey: "broadcastActive")
     }
     override func broadcastFinished() {
-        UserDefaults(suiteName: "group.br.com.radaruber.app")?.set(false, forKey: "broadcastActive")
+        RadarEnvironment.sharedDefaults?.set(false, forKey: "broadcastActive")
     }
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
@@ -39,7 +45,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
         lastFrameAt = ProcessInfo.processInfo.systemUptime
         let startedAt = lastFrameAt
-        UserDefaults(suiteName: "group.br.com.radaruber.app")?.set(Date().timeIntervalSince1970, forKey: "lastFrameAt")
+        RadarEnvironment.sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "lastFrameAt")
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer)
         do {
             try handler.perform([request])
@@ -49,10 +55,10 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
             switch RadarOfferParser.parse(recognizedText) {
             case .incomplete:
-                UserDefaults(suiteName: "group.br.com.radaruber.app")?.set("Aguardando oferta completa e legível", forKey: "lastReadStatus")
+                RadarEnvironment.sharedDefaults?.set("Aguardando oferta completa e legível", forKey: "lastReadStatus")
                 return
             case .complete(let offer):
-                let defaults = UserDefaults(suiteName: "group.br.com.radaruber.app")
+                let defaults = RadarEnvironment.sharedDefaults
                 let fuelCost = defaults?.double(forKey: "fuelCostPerKm") ?? 0.28
                 let target = defaults?.double(forKey: "targetNetPerHour") ?? 0
                 let now = Date()
@@ -81,7 +87,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
             }
         } catch {
             // Never invent data or alert the driver on a failed read.
-            UserDefaults(suiteName: "group.br.com.radaruber.app")?.set("Falha de leitura; aguardando novo quadro", forKey: "lastReadStatus")
+            RadarEnvironment.sharedDefaults?.set("Falha de leitura; aguardando novo quadro", forKey: "lastReadStatus")
         }
     }
 
@@ -105,7 +111,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
             trigger: nil
         )
         UNUserNotificationCenter.current().add(notification) { error in
-            UserDefaults(suiteName: "group.br.com.radaruber.app")?.set(
+            RadarEnvironment.sharedDefaults?.set(
                 error?.localizedDescription ?? "Agendada; entrega depende do iOS",
                 forKey: "lastNotificationStatus"
             )

@@ -77,3 +77,11 @@ Esse aprendizado usa ofertas observadas: não identifica corridas aceitas, não 
 As consultas agora separam a semana operacional, de segunda-feira às 04:00 até a segunda seguinte às 04:00 (fim exclusivo), no fuso America/Sao_Paulo. O histórico completo é preservado, inclusive para consultas de semanas anteriores com `referenceDate`. Esse corte operacional não confirma a elegibilidade do contrato Zarp nem concede descontos. Registros antigos sem o novo campo de referência continuam decodificáveis.
 
 Ainda não existe importador conectado de viagens/pagamentos. Portanto, o núcleo financeiro testado não deve ser apresentado como sincronização automática com a Uber.
+
+## Experimento de instalação pelo Windows (ainda não validado no aparelho)
+
+CI agora empacota `RadarUber-resign.ipa` com assinatura ad hoc local e entitlements preservados, destinado a reassinatura pelo instalador. A assinatura ad hoc NÃO autoriza executar no iPhone. O pacote ainda precisa ser assinado para o aparelho por uma ferramenta como AltStore Classic/AltServer. A extensão RadarBroadcast deve ser mantida na instalação.
+
+O app resolve o grupo compartilhado a partir dos metadados ALTAppGroups que o AltStore ajusta durante a reassinatura, e descobre o identificador efetivo da extensão embutida. Isso corrige IDs fixos incompatíveis com reassinatura; NÃO comprova que a conta gratuita consegue provisionar o conjunto no iPhone do usuário. Sem acesso ao grupo, o app mostra erro e a extensão encerra, sem gerar recomendações com parâmetros ausentes.
+
+Referências consultadas: documentação oficial https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows e https://faq.altstore.io/altstore-classic/your-altstore ; implementação de referência https://github.com/altstoreio/AltStore/blob/develop/AltServer/Devices/ALTDeviceManager%2BInstallation.swift (registro de grupos e metadados de assinatura). Com conta gratuita, as instalações expiram em sete dias e precisam ser renovadas. A compatibilidade de captura, grupo e notificações precisa ser testada fisicamente. Não usar este experimento como prova de funcionamento em corridas.

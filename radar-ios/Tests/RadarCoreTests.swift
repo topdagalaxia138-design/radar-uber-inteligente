@@ -143,3 +143,17 @@ final class RadarWeeklyBoundaryTests: XCTestCase {
         XCTAssertEqual(restored.trips.count, 1)
     }
 }
+
+final class RadarSigningMetadataTests: XCTestCase {
+    func testOriginalInstallKeepsGroup() {
+        XCTAssertEqual(RadarEnvironment.groupIdentifier(from: [:]), "group.br.com.radaruber.app")
+    }
+    func testResignedInstallSelectsAdjustedGroup() {
+        XCTAssertEqual(RadarEnvironment.groupIdentifier(from: ["ALTAppGroups": ["group.br.com.radaruber.app.ABC123"]]),
+                       "group.br.com.radaruber.app.ABC123")
+    }
+    func testUnrelatedMetadataCannotSelectOtherContainer() {
+        XCTAssertEqual(RadarEnvironment.groupIdentifier(from: ["ALTAppGroups": ["group.other", "group.br.com.radaruber.appfake"]]),
+                       "group.br.com.radaruber.app")
+    }
+}
