@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'radar-uber-v02'; // Chave preservada para manter histórico e parâmetros das versões anteriores.
-const DEFAULTS = { weeklyRent: 825, ethanolPrice: 4.20, kmPerLiter: 15, monthlyGoal: 1000, maxKm: 150, dailyHours: 5, daysPerWeek: 7 };
+const DEFAULTS = { weeklyRent: 835, ethanolPrice: 4.20, kmPerLiter: 15, monthlyGoal: 1000, maxKm: 150, dailyHours: 6, daysPerWeek: 7 };
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : fallback;
 const money = (value) => (Number(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const localDateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
@@ -11,7 +11,7 @@ const readSettings = (obj={}) => ({
   kmPerLiter: Math.max(0.1, number(obj.kmPerLiter, DEFAULTS.kmPerLiter) || DEFAULTS.kmPerLiter),
   monthlyGoal: number(obj.monthlyGoal, DEFAULTS.monthlyGoal),
   maxKm: Math.max(1, number(obj.maxKm, DEFAULTS.maxKm) || DEFAULTS.maxKm),
-  dailyHours: Math.max(0.5, number(obj.dailyHours, DEFAULTS.dailyHours) || DEFAULTS.dailyHours),
+  dailyHours: Math.min(6, Math.max(0.5, number(obj.dailyHours, DEFAULTS.dailyHours) || DEFAULTS.dailyHours)),
   daysPerWeek: Math.min(7, Math.max(1, Math.round(number(obj.daysPerWeek, DEFAULTS.daysPerWeek) || DEFAULTS.daysPerWeek)))
 });
 const costs = (settings) => ({ fuelPerKm: settings.ethanolPrice/settings.kmPerLiter, rentPerDay: settings.weeklyRent*52/12/30, personalPerDay: settings.monthlyGoal/30 });
@@ -33,14 +33,13 @@ function loadState(){
     current.km=number(current.km); current.elapsedMs=number(current.elapsedMs); current.earnings=number(current.earnings);
     // Migra dias antigos: se já houve km, tempo ou recebimento, considera que o expediente começou.
     current.hasStarted=Boolean(current.hasStarted||current.km>0||current.elapsedMs>0||current.earnings>0);
-    if(current.sessionActive){current.sessionActive=false;current.sessionStartedAt=null;}
     return {settings,current,history};
   } catch { return {settings:readSettings(),current:freshDay(),history:[]}; }
 }
 let state=loadState();
 let settings=state.settings;
 let km=state.current.km, earnings=state.current.earnings, elapsedBefore=state.current.elapsedMs, hasStarted=Boolean(state.current.hasStarted);
-let active=false, startAt=null, watchId=null, timer=null, lastPoint=null;
+let active=Boolean(state.current.sessionActive), startAt=active?Date.now():null, watchId=null, timer=null, lastPoint=null;
 function elapsed(){return elapsedBefore+(active&&startAt?Date.now()-startAt:0);}
 function currentCosts(){return costs(settings);}
 function fuelCost(){return km*currentCosts().fuelPerKm;}
@@ -80,7 +79,7 @@ function render(){
   $('hoursHint').textContent=`Meta: ${String(settings.dailyHours).replace('.',',')}h por dia`;
   $('net').textContent=net===null?'—':money(net);$('net').classList.toggle('negative',net!==null&&net<0);$('breakReceived').textContent=money(earnings);$('breakFuel').textContent=money(fuelCost());$('breakRent').textContent=money(c.rentPerDay);$('breakNet').textContent=net===null?'Aguardando início':money(net);$('breakNet').style.color=net!==null&&net<0?'#ff8990':net===null?'':'#62e4aa';
   $('netHint').textContent=net===null?'Inicie o expediente para calcular o saldo do dia.':net>=c.personalPerDay?'Meta pessoal diária alcançada após aluguel e combustível.':net>=0?`Faltam ${money(c.personalPerDay-net)} para sua meta pessoal diária.`:'Saldo após descontar aluguel e combustível.';
-  $('status').textContent=active?'Em expediente':'Parado';$('startBtn').disabled=active;$('stopBtn').disabled=!active;
+  $('status').textContent=active?'Em expediente':'Parado';$('startBtn').disabled=active;$('stopBtn').disabled=!active;$('startBtn').textContent=active?'▶ EXPEDIENTE EM ANDAMENTO':'▶ INICIAR EXPEDIENTE';
   $('goalMessage').textContent=earnings>=target?'✓ Meta de recebimento atingida. Você pode encerrar quando quiser.':'Meta ainda não atingida.';$('goalMessage').classList.toggle('achieved',earnings>=target);
   $('dailyDate').textContent=new Date(`${localDateKey()}T12:00:00`).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
   // Não sobrescreve o campo enquanto o motorista está digitando.
@@ -95,10 +94,19 @@ function onPosition(pos){
   lastPoint=point;$('gpsMessage').textContent=`GPS ativo • precisão aproximada de ${Math.round(c.accuracy)} m. Distância estimada; confira com o odômetro.`;saveState();render();
 }
 function onError(err){const messages={1:'Permissão de localização negada. Autorize a localização para este site nas configurações do navegador.',2:'Localização indisponível. Verifique o GPS e tente novamente.',3:'O GPS demorou para responder. Tente novamente.'};$('gpsMessage').textContent=messages[err.code]||'Não foi possível obter a localização.';}
+function startTracking(){
+  if(!navigator.geolocation){$('gpsMessage').textContent='Este navegador não oferece geolocalização.';return false;}
+  if(!window.isSecureContext){$('gpsMessage').textContent='O GPS exige HTTPS ou localhost.';return false;}
+  lastPoint=null;
+  watchId=navigator.geolocation.watchPosition(onPosition,onError,{enableHighAccuracy:true,maximumAge:2000,timeout:15000});
+  timer=setInterval(()=>{archiveIfNewDay();saveState();render();},1000);
+  return true;
+}
 $('startBtn').addEventListener('click',()=>{
-  if(!navigator.geolocation){$('gpsMessage').textContent='Este navegador não oferece geolocalização.';return;}if(!window.isSecureContext){$('gpsMessage').textContent='O GPS exige HTTPS ou localhost.';return;}if(active)return;
-  active=true;hasStarted=true;startAt=Date.now();lastPoint=null;$('gpsMessage').textContent='Solicitando autorização de localização...';watchId=navigator.geolocation.watchPosition(onPosition,onError,{enableHighAccuracy:true,maximumAge:2000,timeout:15000});
-  timer=setInterval(()=>{archiveIfNewDay();saveState();render();},1000);saveState();render();
+  if(active)return;
+  active=true;hasStarted=true;startAt=Date.now();$('gpsMessage').textContent='Iniciando expediente e solicitando localização...';
+  if(!startTracking()){active=false;startAt=null;return;}
+  saveState();render();
 });
 $('stopBtn').addEventListener('click',()=>{if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;active=false;elapsedBefore=elapsed();startAt=null;lastPoint=null;clearInterval(timer);timer=null;$('gpsMessage').textContent='Expediente encerrado. Tempo, distância e valores foram salvos neste navegador.';saveState();render();});
 $('saveEarnings').addEventListener('click',()=>{
@@ -109,7 +117,12 @@ $('saveEarnings').addEventListener('click',()=>{
 $('saveSettings').addEventListener('click',()=>{
   const vals={weeklyRent:$('weeklyRent').value,ethanolPrice:$('ethanolPrice').value,kmPerLiter:$('kmPerLiter').value,monthlyGoal:$('monthlyGoal').value,maxKm:$('maxKm').value,dailyHours:$('dailyHours').value,daysPerWeek:$('daysPerWeek').value};
   if(Object.values(vals).some(v=>v===''||!Number.isFinite(Number(v)))||Number(vals.kmPerLiter)<=0||Number(vals.maxKm)<=0||Number(vals.dailyHours)<=0||Number(vals.daysPerWeek)<1||Number(vals.daysPerWeek)>7){$('settingsMessage').textContent='Confira os campos: informe números válidos e consumo maior que zero.';return;}
-  settings=readSettings(vals);state.settings=settings;saveState();renderSettings();render();$('settingsMessage').textContent='Parâmetros atualizados e salvos neste aparelho.';
+  settings=readSettings(vals);state.settings=settings;saveState();if(active){
+  $('gpsMessage').textContent='Expediente anterior recuperado. O tempo foi preservado e o GPS está sendo reconectado. Confira o odômetro para cobrir eventual pausa do navegador.';
+  if(!startTracking()){$('gpsMessage').textContent+=' O expediente continua registrado, mas o GPS não pôde ser iniciado.';}
+  saveState();
+}
+renderSettings();render();$('settingsMessage').textContent='Parâmetros atualizados e salvos neste aparelho.';
 });
 $('exportBtn').addEventListener('click',()=>{
   const rows=[...state.history,{...state.current,date:localDateKey(),km,elapsedMs:elapsed(),earnings,settingsSnapshot:snapshot()}].filter((item,i,all)=>all.findIndex(x=>x.date===item.date)===i).sort((a,b)=>a.date.localeCompare(b.date));
