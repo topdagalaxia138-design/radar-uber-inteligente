@@ -99,7 +99,7 @@ function startTracking(){
   if(!window.isSecureContext){$('gpsMessage').textContent='O GPS exige HTTPS ou localhost.';return false;}
   lastPoint=null;
   watchId=navigator.geolocation.watchPosition(onPosition,onError,{enableHighAccuracy:true,maximumAge:2000,timeout:15000});
-  timer=setInterval(()=>{archiveIfNewDay();saveState();render();},1000);
+  timer=setInterval(()=>{archiveIfNewDay();if(active&&elapsed()>=settings.dailyHours*3600000){if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;active=false;elapsedBefore=settings.dailyHours*3600000;startAt=null;lastPoint=null;clearInterval(timer);timer=null;$('gpsMessage').textContent='Limite máximo da jornada atingido. O expediente foi encerrado automaticamente.';}saveState();render();},1000);
   return true;
 }
 $('startBtn').addEventListener('click',()=>{
