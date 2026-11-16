@@ -71,3 +71,9 @@ Após assinatura e instalação: autorizar notificações, iniciar Radar Leitura
 O Broadcast agora mantém até 500 observações legíveis por sete dias, sem guardar texto de tela, endereços ou imagens. Após 20 observações, o percentil 60 das taxas após combustível pode elevar o filtro até 25% acima da meta configurada. Nunca reduz a meta. Uma oferta repetida não gera outra observação dentro da janela de deduplicação. O filtro da oferta atual usa somente observações anteriores.
 
 Esse aprendizado usa ofertas observadas: não identifica corridas aceitas, não registra ganhos e não aprende tempos reais de viagens. Esses resultados continuam dependendo de uma fonte de viagens concluídas. A tela informa quantidade observada e filtro aplicado. Falhas de OCR são registradas no diagnóstico sem gerar alertas para o motorista.
+
+## Separação semanal do núcleo financeiro
+
+As consultas agora separam a semana operacional, de segunda-feira às 04:00 até a segunda seguinte às 04:00 (fim exclusivo), no fuso America/Sao_Paulo. O histórico completo é preservado, inclusive para consultas de semanas anteriores com `referenceDate`. Esse corte operacional não confirma a elegibilidade do contrato Zarp nem concede descontos. Registros antigos sem o novo campo de referência continuam decodificáveis.
+
+Ainda não existe importador conectado de viagens/pagamentos. Portanto, o núcleo financeiro testado não deve ser apresentado como sincronização automática com a Uber.

@@ -92,3 +92,54 @@ final class RadarAdaptiveHistoryTests: XCTestCase {
         XCTAssertEqual(restored.target(base: 40, now: date), 50)
     }
 }
+
+final class RadarWeeklyBoundaryTests: XCTestCase {
+    func date(_ value: String) -> Date { ISO8601DateFormatter().date(from: value)! }
+    func trip(_ id: String, _ timestamp: String, _ received: Double = 100,
+              _ method: RadarPaymentMethod = .uberCard) -> RadarCompletedTrip {
+        .init(id: id, date: date(timestamp), received: received, fuel: 10, method: method)
+    }
+    func testMondayFourAMStartsNewWeekInBrazil() {
+        var ledger = RadarWeeklyLedger()
+        ledger.referenceDate = date("2026-11-16T08:00:00-03:00")
+        XCTAssertTrue(ledger.record(trip("old", "2026-11-16T03:59:59-03:00")))
+        XCTAssertTrue(ledger.record(trip("new", "2026-11-16T04:00:00-03:00")))
+        XCTAssertEqual(ledger.weeklyTrips.map(\.id), ["new"])
+        XCTAssertEqual(ledger.received, 100)
+        XCTAssertEqual(ledger.rentalRemaining, 735)
+    }
+    func testNextWeekIsExcludedAndHistoryPreserved() {
+        var ledger = RadarWeeklyLedger()
+        ledger.referenceDate = date("2026-11-16T08:00:00-03:00")
+        XCTAssertTrue(ledger.record(trip("this", "2026-11-16T04:00:00-03:00")))
+        XCTAssertTrue(ledger.record(trip("next", "2026-11-23T04:00:00-03:00")))
+        XCTAssertEqual(ledger.received, 100)
+        XCTAssertEqual(ledger.trips.count, 2)
+        ledger.referenceDate = date("2026-11-23T08:00:00-03:00")
+        XCTAssertEqual(ledger.weeklyTrips.map(\.id), ["next"])
+    }
+    func testCashAndOwnTerminalDoNotCreditRental() {
+        var ledger = RadarWeeklyLedger()
+        ledger.referenceDate = date("2026-11-16T08:00:00-03:00")
+        XCTAssertTrue(ledger.record(trip("cash", "2026-11-16T05:00:00-03:00", 100, .cash)))
+        XCTAssertTrue(ledger.record(trip("terminal", "2026-11-16T06:00:00-03:00", 100, .ownTerminal)))
+        XCTAssertEqual(ledger.received, 200)
+        XCTAssertEqual(ledger.rentalRemaining, 835)
+        XCTAssertEqual(ledger.net, -655)
+    }
+    func testLegacyLedgerDecodesWithoutNewDateField() throws {
+        let json = Data(#"{"rental":835,"trips":[]}"#.utf8)
+        let ledger = try JSONDecoder().decode(RadarWeeklyLedger.self, from: json)
+        XCTAssertNil(ledger.referenceDate)
+        XCTAssertEqual(ledger.rentalRemaining, 835)
+    }
+    func testHistoryAndReferenceSurviveSaving() throws {
+        var ledger = RadarWeeklyLedger()
+        ledger.referenceDate = date("2026-11-16T08:00:00-03:00")
+        XCTAssertTrue(ledger.record(trip("saved", "2026-11-16T05:00:00-03:00")))
+        let restored = try JSONDecoder().decode(RadarWeeklyLedger.self, from: JSONEncoder().encode(ledger))
+        XCTAssertEqual(restored.received, ledger.received)
+        XCTAssertEqual(restored.weekInterval, ledger.weekInterval)
+        XCTAssertEqual(restored.trips.count, 1)
+    }
+}
