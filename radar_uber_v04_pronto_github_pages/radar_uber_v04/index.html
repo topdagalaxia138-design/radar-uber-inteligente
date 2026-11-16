@@ -50,6 +50,34 @@
     <p class="disclaimer">Estimativa. Ainda não desconta manutenção, lavagem, alimentação, impostos e outras despesas.</p>
   </section>
 
+  <section class="decision-panel" aria-labelledby="decisionTitle">
+    <div class="decision-head"><div><span class="eyebrow">MOTOR DE RENTABILIDADE</span><h2 id="decisionTitle">Análise da corrida</h2><p>Informe os dados que aparecem na oferta. O Radar calcula a rentabilidade incluindo o deslocamento até o passageiro.</p></div><span class="beta-tag">MOTOR BETA</span></div>
+    <div class="offer-grid">
+      <div class="field"><label for="offerFare">Valor oferecido (R$)</label><input id="offerFare" type="number" min="0" step="0.01" placeholder="Ex.: 43"></div>
+      <div class="field"><label for="pickupMinutes">Minutos até o passageiro</label><input id="pickupMinutes" type="number" min="0" step="0.5" placeholder="Ex.: 10"></div>
+      <div class="field"><label for="tripMinutes">Minutos da viagem</label><input id="tripMinutes" type="number" min="0" step="0.5" placeholder="Ex.: 20"></div>
+      <div class="field"><label for="pickupKm">Km até o passageiro</label><input id="pickupKm" type="number" min="0" step="0.1" placeholder="Ex.: 3"></div>
+      <div class="field"><label for="tripKm">Km da viagem</label><input id="tripKm" type="number" min="0" step="0.1" placeholder="Ex.: 12"></div>
+      <div class="field"><label for="emptyKm">Km vazios prováveis após destino</label><input id="emptyKm" type="number" min="0" step="0.1" value="0"></div>
+    </div>
+    <button id="analyzeOffer" class="analyze">ANALISAR OFERTA</button>
+    <div id="decisionResult" class="decision-result" aria-live="polite"><strong>AGUARDANDO OFERTA</strong><p>Preencha os dados para receber uma recomendação. O Radar não inventará uma leitura que não recebeu.</p></div>
+    <div class="decision-metrics">
+      <div><small>Ganho bruto / hora</small><strong id="offerGrossHour">—</strong></div>
+      <div><small>Lucro estimado / hora</small><strong id="offerNetHour">—</strong></div>
+      <div><small>Combustível estimado</small><strong id="offerFuelCost">—</strong></div>
+      <div><small>Lucro estimado da corrida</small><strong id="offerNet">—</strong></div>
+    </div>
+    <div class="weekly-progress">
+      <div class="weekly-head"><div><strong>Meta Zarp Super</strong><small>Corridas concluídas nesta semana</small></div><strong id="weeklyCountLabel">0 / 80</strong></div>
+      <div class="weekly-bar"><div id="weeklyProgressFill"></div></div>
+      <div class="weekly-controls"><label for="weeklyRides">Atualizar total semanal</label><input id="weeklyRides" type="number" min="0" max="300" step="1" value="0"><button id="saveWeeklyRides" class="save">SALVAR</button></div>
+      <div id="weeklyTier" class="weekly-tier">Próxima faixa: 40 corridas • R$ 80 de desconto</div>
+      <p class="note">Faixas confirmadas: 40 = R$ 80; 60 = R$ 160; 80 = R$ 250. Acima de 80 não há desconto adicional. Contador manual até existir integração automática.</p>
+    </div>
+    <p class="decision-disclaimer">Estimativa inicial: considera combustível, quilômetros e tempo informados. Ainda não conhece trânsito ao vivo, pedágios, espera real ou demanda no destino. Confirme a oferta no Uber.</p>
+  </section>
+
   <details class="fold">
     <summary>Fechamento diário <span>+</span></summary>
     <div class="fold-content">
