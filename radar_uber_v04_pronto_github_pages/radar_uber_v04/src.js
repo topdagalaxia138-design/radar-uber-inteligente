@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'radar-uber-v02'; // Chave preservada para manter histórico e parâmetros das versões anteriores.
-const DEFAULTS = { weeklyRent: 835, ethanolPrice: 4.20, kmPerLiter: 15, monthlyGoal: 1000, maxKm: 150, dailyHours: 6, daysPerWeek: 7 };
+const DEFAULTS = { weeklyRent: 825, ethanolPrice: 4.20, kmPerLiter: 15, monthlyGoal: 1000, maxKm: 150, dailyHours: 6, daysPerWeek: 7 };
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : fallback;
 const money = (value) => (Number(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const localDateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
