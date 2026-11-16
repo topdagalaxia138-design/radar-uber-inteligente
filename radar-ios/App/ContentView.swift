@@ -1,8 +1,14 @@
 import SwiftUI
 import ReplayKit
+import UserNotifications
+import UIKit
 
 struct ContentView: View {
-    @State private var notificationsEnabled = false
+    @AppStorage("fuelCostPerKm", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    private var fuelCostPerKm = 0.28
+    @AppStorage("targetNetPerHour", store: UserDefaults(suiteName: "group.br.com.radaruber.app"))
+    private var targetNetPerHour = 0.0
+    @State private var notificationStatus = "Verificando autorização…"
 
     var body: some View {
         NavigationStack {
@@ -12,19 +18,48 @@ struct ContentView: View {
                     .foregroundStyle(.green)
                 Text("Radar Uber Inteligente")
                     .font(.largeTitle.bold())
-                Text("Leitura local de ofertas por transmissão de tela autorizada.")
+                Text("Leitura local das ofertas durante transmissão de tela autorizada.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Configuração inicial")
+                        .font(.headline)
+                    HStack {
+                        Text("Custo de combustível por km")
+                        Spacer()
+                        TextField("0,28", value: $fuelCostPerKm, format: .number.precision(.fractionLength(2)))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 90)
+                    }
+                    HStack {
+                        Text("Meta líquida por hora (R$)")
+                        Spacer()
+                        TextField("Defina sua meta", value: $targetNetPerHour, format: .number.precision(.fractionLength(0)))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 125)
+                    }
+                    Text("A meta é configurada uma vez. Sem ela, o Radar não libera recomendações de PEGAR.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
                 BroadcastPicker()
                     .frame(height: 52)
 
-                Text("Toque em Iniciar transmissão e escolha Radar Leitura. Depois volte para a Uber. O iPhone mostrará o indicador de gravação/transmissão enquanto a leitura estiver ativa.")
+                Text("Inicie a transmissão, selecione Radar Leitura e volte para a Uber. O iPhone mantém o indicador de transmissão visível.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
-                Label("As imagens são processadas no aparelho. O Radar não envia a tela para um servidor.", systemImage: "lock.shield")
+                Label(notificationStatus, systemImage: "bell")
+                    .font(.footnote)
+
+                Label("O processamento OCR é local. A tela não é enviada para um servidor.", systemImage: "lock.shield")
                     .font(.footnote)
                     .padding()
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -41,7 +76,9 @@ struct ContentView: View {
     @MainActor
     private func refreshNotificationStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
-        notificationsEnabled = settings.authorizationStatus == .authorized
+        notificationStatus = settings.authorizationStatus == .authorized
+            ? "Notificações autorizadas"
+            : "Notificações ainda não autorizadas"
     }
 }
 
