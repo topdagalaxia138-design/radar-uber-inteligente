@@ -1,17 +1,11 @@
 import ReplayKit
 import Vision
 import UserNotifications
-import CoreImage
 
 final class SampleHandler: RPBroadcastSampleHandler {
     private let request = VNRecognizeTextRequest()
     private var lastNotificationKey = ""
     private var lastNotificationAt = Date.distantPast
-    private let settings = RadarDecisionSettings(
-        fuelCostPerKilometer: 0.28,
-        targetNetPerHour: 0, // Must be set from the driver's configured target before recommendations are enabled.
-        preferredMinimumFare: 25
-    )
 
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
         request.recognitionLevel = .fast
@@ -21,7 +15,6 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     override func broadcastPaused() {}
     override func broadcastResumed() {}
-
     override func broadcastFinished() {}
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
@@ -47,15 +40,22 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 lastNotificationKey = key
                 lastNotificationAt = Date()
 
-                let decision = RadarDecisionEngine.evaluate(offer, settings: settings)
-                deliver(decision, offer: offer)
+                let defaults = UserDefaults(suiteName: "group.br.com.radaruber.app")
+                let fuelCost = defaults?.double(forKey: "fuelCostPerKm") ?? 0.28
+                let target = defaults?.double(forKey: "targetNetPerHour") ?? 0
+                let settings = RadarDecisionSettings(
+                    fuelCostPerKilometer: fuelCost > 0 ? fuelCost : 0.28,
+                    targetNetPerHour: target,
+                    preferredMinimumFare: 25
+                )
+                deliver(RadarDecisionEngine.evaluate(offer, settings: settings))
             }
         } catch {
-            // No offer notification on OCR failure. Never guess.
+            // OCR failure is silent; never invent offer data.
         }
     }
 
-    private func deliver(_ decision: RadarDecision, offer: RadarOffer) {
+    private func deliver(_ decision: RadarDecision) {
         let content = UNMutableNotificationContent()
         content.sound = .default
 
@@ -64,18 +64,16 @@ final class SampleHandler: RPBroadcastSampleHandler {
             content.title = "RADAR • PEGAR"
             content.subtitle = String(format: "Líquido estimado R$ %.2f • R$ %.2f/h", net, netHour)
             content.body = reason
-        case .reject(let reason, let net, let netHour):
-            // Rejected offers stay silent by design.
-            return
-        case .insufficient:
+        case .reject, .insufficient:
+            // Rejected or incomplete offers stay silent by design.
             return
         }
 
-        let request = UNNotificationRequest(
-            identifier: "radar-offer-\\(UUID().uuidString)",
+        let notification = UNNotificationRequest(
+            identifier: "radar-offer-\(UUID().uuidString)",
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(request)
+        UNUserNotificationCenter.current().add(notification)
     }
 }
