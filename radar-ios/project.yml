@@ -35,7 +35,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: br.com.radaruber.app.broadcast
+        INFOPLIST_FILE: Broadcast/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Radar Leitura
-        INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.broadcast-services-upload
-        INFOPLIST_KEY_NSExtension_NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).SampleHandler"
         CODE_SIGN_ENTITLEMENTS: Broadcast/RadarBroadcast.entitlements
