@@ -11,9 +11,13 @@ on:
       - ".github/workflows/build-ios.yml"
   workflow_dispatch:
 
+concurrency:
+  group: radar-ios-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
