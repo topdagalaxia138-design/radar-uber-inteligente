@@ -108,6 +108,54 @@ function startTracking(){
   }
   return true;
 }
+
+const DECISION_KEY='radar-uber-decision-v1';
+const DECISION_RULES={minimumPreferredFare:25,standardNetPerHour:50,lowFareNetPerHour:60,minimumNet:6};
+function getDecisionState(){
+  try{const saved=JSON.parse(localStorage.getItem(DECISION_KEY)||'{}');return {weeklyRides:Math.max(0,Math.min(300,Math.floor(Number(saved.weeklyRides)||0)))};}
+  catch{return {weeklyRides:0};}
+}
+let decisionState=getDecisionState();
+function renderWeeklyProgress(){
+  const count=decisionState.weeklyRides;
+  $('weeklyRides').value=count;$('weeklyCountLabel').textContent=count+' / 80';
+  $('weeklyProgressFill').style.width=Math.min(100,count/80*100)+'%';
+  let tier;
+  if(count>=80)tier='Meta de 80 atingida: R$ 250 de desconto. Corridas adicionais são para lucro, sem desconto extra.';
+  else if(count>=60)tier='Próxima faixa: 80 corridas • mais R$ 90 de desconto semanal.';
+  else if(count>=40)tier='Próxima faixa: 60 corridas • mais R$ 80 de desconto semanal.';
+  else tier='Próxima faixa: 40 corridas • R$ 80 de desconto semanal.';
+  $('weeklyTier').textContent=tier;
+}
+function analyzeOffer(){
+  const fare=Number($('offerFare').value),pickupMin=Number($('pickupMinutes').value),tripMin=Number($('tripMinutes').value);
+  const pickupKm=Number($('pickupKm').value),tripKm=Number($('tripKm').value),emptyKm=Number($('emptyKm').value||0);
+  const required=[fare,pickupMin,tripMin,pickupKm,tripKm,emptyKm],result=$('decisionResult');
+  if(required.some(v=>!Number.isFinite(v)||v<0)||fare<=0||pickupMin+tripMin<=0||tripMin<=0){
+    result.className='decision-result warning';
+    result.innerHTML='<strong>NÃO FOI POSSÍVEL ANALISAR</strong><p>Confira valor, tempo de viagem e quilômetros. Não aceite uma decisão baseada em dados incompletos.</p>';
+    $('offerGrossHour').textContent='—';$('offerNetHour').textContent='—';$('offerFuelCost').textContent='—';$('offerNet').textContent='—';return;
+  }
+  const totalMinutes=pickupMin+tripMin,totalKm=pickupKm+tripKm+emptyKm;
+  const fuel=totalKm*currentCosts().fuelPerKm,net=fare-fuel,grossHour=fare/totalMinutes*60,netHour=net/totalMinutes*60;
+  const lowFare=fare<DECISION_RULES.minimumPreferredFare;
+  const take=net>0&&net>=DECISION_RULES.minimumNet&&netHour>=(lowFare?DECISION_RULES.lowFareNetPerHour:DECISION_RULES.standardNetPerHour);
+  const reason=take?(lowFare?'Exceção positiva: abaixo de R$ 25, mas a rentabilidade estimada por hora compensa.':'Rentabilidade estimada atende ao piso do Radar.')
+    :(net<=0?'O combustível estimado consome todo o valor ou deixa lucro negativo.':net<DECISION_RULES.minimumNet?'Lucro estimado muito baixo para o tempo e os quilômetros envolvidos.':lowFare?'Abaixo de R$ 25 e não atingiu a rentabilidade excepcional exigida.':'Lucro por hora abaixo do piso definido pelo Radar.');
+  result.className='decision-result '+(take?'take':'reject');
+  result.innerHTML='<strong>'+(take?'PEGAR':'NÃO PEGAR')+'</strong><p>'+reason+'</p><small>'+totalMinutes.toFixed(0)+' min totais • '+totalKm.toFixed(1).replace('.',',')+' km considerados</small>';
+  $('offerGrossHour').textContent=money(grossHour)+'/h';$('offerNetHour').textContent=money(netHour)+'/h';$('offerFuelCost').textContent=money(fuel);$('offerNet').textContent=money(net);
+}
+$('analyzeOffer').addEventListener('click',analyzeOffer);
+$('saveWeeklyRides').addEventListener('click',()=>{
+ const raw=$('weeklyRides').value,count=Number(raw);
+ if(raw===''||!Number.isInteger(count)||count<0||count>300){$('weeklyTier').textContent='Informe um total inteiro entre 0 e 300.';return;}
+ decisionState.weeklyRides=count;
+ try{localStorage.setItem(DECISION_KEY,JSON.stringify(decisionState));renderWeeklyProgress();}
+ catch{$('weeklyTier').textContent='Não foi possível salvar o total semanal neste navegador.';}
+});
+renderWeeklyProgress();
+
 $('startBtn').addEventListener('click',()=>{
   if(active)return;
   active=true;hasStarted=true;startAt=Date.now();$('gpsMessage').textContent='Iniciando expediente e solicitando localização...';
