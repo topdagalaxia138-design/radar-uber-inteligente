@@ -131,7 +131,8 @@ function analyzeOffer(){
   const fare=Number($('offerFare').value),pickupMin=Number($('pickupMinutes').value),tripMin=Number($('tripMinutes').value);
   const pickupKm=Number($('pickupKm').value),tripKm=Number($('tripKm').value),emptyKm=Number($('emptyKm').value||0);
   const required=[fare,pickupMin,tripMin,pickupKm,tripKm,emptyKm],result=$('decisionResult');
-  if(required.some(v=>!Number.isFinite(v)||v<0)||fare<=0||pickupMin+tripMin<=0||tripMin<=0){
+  const missing=['offerFare','pickupMinutes','tripMinutes','pickupKm','tripKm'].some(id=>$(id).value.trim()==='');
+  if(missing||required.some(v=>!Number.isFinite(v)||v<0)||fare<=0||pickupMin+tripMin<=0||tripMin<=0){
     result.className='decision-result warning';
     result.innerHTML='<strong>NÃO FOI POSSÍVEL ANALISAR</strong><p>Confira valor, tempo de viagem e quilômetros. Não aceite uma decisão baseada em dados incompletos.</p>';
     $('offerGrossHour').textContent='—';$('offerNetHour').textContent='—';$('offerFuelCost').textContent='—';$('offerNet').textContent='—';return;
