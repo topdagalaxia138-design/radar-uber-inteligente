@@ -8,18 +8,14 @@ struct ContentView: View {
     private var fuelCostPerKm = 0.28
     @AppStorage("targetNetPerHour", store: RadarEnvironment.sharedDefaults)
     private var targetNetPerHour = 0.0
-    @AppStorage("lastProcessingSeconds", store: RadarEnvironment.sharedDefaults)
-    private var lastProcessingSeconds = 0.0
-    @AppStorage("lastNotificationStatus", store: RadarEnvironment.sharedDefaults)
-    private var lastNotificationStatus = "Nenhuma notificação agendada"
     @AppStorage("observedOfferCount", store: RadarEnvironment.sharedDefaults)
     private var observedOfferCount = 0
     @AppStorage("adaptiveTarget", store: RadarEnvironment.sharedDefaults)
     private var adaptiveTarget = 0.0
-    @AppStorage("lastReadStatus", store: RadarEnvironment.sharedDefaults)
-    private var lastReadStatus = "Nenhuma leitura realizada"
-    @AppStorage("lastOfferSummary", store: RadarEnvironment.sharedDefaults)
-    private var lastOfferSummary = ""
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var reading: RadarReadingSnapshot?
+    @State private var clock = Date()
+    @State private var testStatus = ""
     @State private var notificationStatus = "Verificando autorização…"
 
     var body: some View {
@@ -67,7 +63,7 @@ struct ContentView: View {
                 }
                 Text("Transmissão de tela").font(.headline)
                 BroadcastPicker()
-                    .frame(height: 52)
+                    .frame(width: 60, height: 60)
                     .disabled(!RadarEnvironment.sharedContainerAvailable)
 
                 Text("Inicie a transmissão, selecione Radar Leitura e volte para a Uber. O iPhone mantém o indicador de transmissão visível.")
@@ -83,12 +79,36 @@ struct ContentView: View {
                     .padding()
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
-                Text(lastProcessingSeconds > 0 ? String(format: "Último processamento: %.2f s (OCR + decisão)", lastProcessingSeconds) : "Aguardando oferta legível")
-                    .font(.caption)
-                Text(lastNotificationStatus).font(.caption)
-                Text(lastReadStatus).font(.caption)
-                if !lastOfferSummary.isEmpty { Text(lastOfferSummary).font(.headline) }
-                Text("Versão de teste: " + (Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")).font(.caption)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Atividade da leitura").font(.headline)
+                    if let reading {
+                        Text(reading.activity(at: clock)).font(.subheadline.bold())
+                        Text("Quadros recebidos para análise: \(reading.frames)").font(.caption)
+                        Text(reading.readStatus).font(.caption)
+                        if reading.lastProcessedAt != nil {
+                            Text(String(format: "Último OCR e decisão: %.2f s", reading.processingSeconds)).font(.caption)
+                        }
+                        Text(reading.notificationStatus).font(.caption)
+                        if !reading.offerSummary.isEmpty {
+                            Text("Última oferta confirmada").font(.caption)
+                            Text(reading.offerSummary).font(.headline)
+                            if let date = reading.offerAt {
+                                Text("Confirmada há \(Int(max(0, clock.timeIntervalSince(date)))) s; não é saldo nem oferta ativa.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    } else {
+                        Text("Inicie Radar Leitura pela Central de Controle.").font(.caption)
+                    }
+                    Text("Versão de teste: " + (Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")).font(.caption)
+                }.padding().frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                Button("Testar banner em 3 segundos") {
+                    Task { await testBanner() }
+                }.buttonStyle(.borderedProminent)
+                Text("Teste apenas do aviso; não representa uma corrida. Após tocar, abra Fotos para observar o banner fora do Radar.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if !testStatus.isEmpty { Text(testStatus).font(.caption) }
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Aprendizado de ofertas").font(.headline)
                     Text("\(observedOfferCount) ofertas legíveis no histórico local")
@@ -106,22 +126,55 @@ struct ContentView: View {
             }
             .navigationTitle("Radar")
             .navigationBarTitleDisplayMode(.inline)
-            .task { await refreshNotificationStatus() }
+            .task(id: scenePhase) {
+                guard scenePhase == .active else { return }
+                await refreshNotificationStatus()
+                while !Task.isCancelled {
+                    clock = Date()
+                    reading = RadarEnvironment.readingStore?.load()
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func testBanner() async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else {
+            testStatus = "Autorize notificações nos Ajustes para testar o banner."
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "RADAR • TESTE DE AVISO"
+        content.body = "Teste de apresentação. Não é recomendação de corrida."
+        content.sound = .default
+        do {
+            try await center.add(UNNotificationRequest(identifier: "radar-banner-test", content: content,
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: 3, repeats: false)))
+            testStatus = "Teste agendado. Abra Fotos e observe por alguns segundos."
+        } catch {
+            testStatus = "Não consegui agendar o teste: " + error.localizedDescription
         }
     }
 
     @MainActor
     private func refreshNotificationStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
-        notificationStatus = settings.authorizationStatus == .authorized
-            ? "Notificações autorizadas"
-            : "Notificações ainda não autorizadas"
+        if settings.authorizationStatus == .authorized {
+            notificationStatus = settings.alertSetting == .enabled
+                ? "Notificações autorizadas; alertas permitidos"
+                : "Notificações autorizadas, mas alertas desativados nos Ajustes"
+        } else {
+            notificationStatus = "Notificações ainda não autorizadas para alertas"
+        }
     }
 }
 
 private struct BroadcastPicker: UIViewRepresentable {
     func makeUIView(context: Context) -> RPSystemBroadcastPickerView {
-        let picker = RPSystemBroadcastPickerView(frame: .zero)
+        let picker = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 60, height: 60))
         // Discover the actual signed extension ID instead of assuming the original ID.
         if let plugins = Bundle.main.builtInPlugInsURL,
            let urls = try? FileManager.default.contentsOfDirectory(at: plugins, includingPropertiesForKeys: nil) {

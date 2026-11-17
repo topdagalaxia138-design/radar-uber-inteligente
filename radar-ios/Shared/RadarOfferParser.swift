@@ -9,6 +9,16 @@ struct RadarOffer: Equatable {
     let rawText: String
     var destination: String? = nil
 
+    func hasSameMeasurements(as other: RadarOffer) -> Bool {
+        func equal(_ a: Double?, _ b: Double?) -> Bool {
+            guard let a, let b, a.isFinite, b.isFinite else { return false }
+            return abs(a - b) < 0.001
+        }
+        return abs(fare - other.fare) < 0.001
+            && equal(pickupMinutes, other.pickupMinutes) && equal(tripMinutes, other.tripMinutes)
+            && equal(pickupKilometers, other.pickupKilometers) && equal(tripKilometers, other.tripKilometers)
+    }
+
     var totalMinutes: Double? {
         guard let pickupMinutes, let tripMinutes else { return nil }
         return pickupMinutes + tripMinutes
@@ -34,15 +44,30 @@ enum RadarOfferParser {
 
         // Ignore unit prices, but never choose arbitrarily between two total fares.
         let money = try! NSRegularExpression(pattern: #"R\$\s*(\d{1,4}(?:\.\d{2})?)(?![\d.])"#)
+        let isPriority = lines.contains { $0.localizedCaseInsensitiveContains("Priority") }
+        var includedAmounts: [Double] = []
         let source = normalized as NSString
         let fares = money.matches(in: normalized, range: NSRange(location: 0, length: source.length)).compactMap { match -> Double? in
             let tail = source.substring(from: match.range.location + match.range.length)
             if tail.range(of: #"^\s*/\s*(km|min|h)\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
                 return nil
             }
-            return Double(source.substring(with: match.range(at: 1)))
+            let value = Double(source.substring(with: match.range(at: 1)))
+            let lineRange = source.lineRange(for: match.range)
+            let nextLine = source.substring(from: NSMaxRange(lineRange)).components(separatedBy: .newlines).first ?? ""
+            let line = (source.substring(with: lineRange) + " " + nextLine)
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pt_BR"))
+            let prefix = source.substring(with: NSRange(location: lineRange.location, length: match.range.location - lineRange.location))
+            if isPriority, line.contains("inclu"), line.contains("retirada priorit"),
+               prefix.range(of: #"[+＋]\s*$"#, options: .regularExpression) != nil,
+               let value {
+                includedAmounts.append(value)
+                return nil
+            }
+            return value
         }
-        guard fares.count == 1, let fare = fares.first, fare.isFinite, fare > 0 else {
+        guard fares.count == 1, let fare = fares.first, fare.isFinite, fare > 0,
+              includedAmounts.count <= 1, includedAmounts.allSatisfy({ $0 >= 0 && $0 <= fare }) else {
             return .incomplete("Valor total ausente ou ambíguo.")
         }
 
@@ -62,9 +87,9 @@ enum RadarOfferParser {
                 tripMinutes: trip.minutes, pickupKilometers: pickup.km, tripKilometers: trip.km, rawText: text))
         }
 
-        // Observed UberX card: pickup row then trip row, without textual labels.
+        // Observed UberX/Priority card: pickup row then trip row, without textual labels.
         // Require the product, offer action and exactly two complete metric rows.
-        guard lines.contains(where: { $0.localizedCaseInsensitiveContains("UberX") }),
+        guard lines.contains(where: { ($0.localizedCaseInsensitiveContains("UberX") || $0.localizedCaseInsensitiveContains("Priority")) }),
               lines.contains(where: { $0.localizedCaseInsensitiveContains("Tenho interesse")
                   || $0.localizedCaseInsensitiveContains("Aceitar") }) else {
             return .incomplete("Tela não identificada como cartão de oferta compatível.")

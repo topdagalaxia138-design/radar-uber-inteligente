@@ -1,121 +1,159 @@
 import ReplayKit
 import Vision
 import UserNotifications
+import CoreVideo
 
 final class SampleHandler: RPBroadcastSampleHandler {
-    private let request = VNRecognizeTextRequest()
     private var gate = RadarOfferGate()
     private var observationGate = RadarOfferGate()
     private var history = RadarAdaptiveHistory()
-    private var lastFrameAt = ProcessInfo.processInfo.systemUptime
+    private var lastFrameAt = -Double.infinity
 
-    override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
+    override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
         guard RadarEnvironment.sharedContainerAvailable else {
             finishBroadcastWithError(NSError(domain: "Radar", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Sem acesso ao grupo compartilhado; revise a assinatura da instalação."
+                NSLocalizedDescriptionKey: "Sem acesso ao grupo compartilhado; revise a assinatura."
             ]))
             return
         }
-        request.recognitionLevel = .fast
-        request.recognitionLanguages = ["pt-BR", "en-US"]
-        request.usesLanguageCorrection = false
+        gate = RadarOfferGate()
+        observationGate = RadarOfferGate()
+        lastFrameAt = -Double.infinity
         let defaults = RadarEnvironment.sharedDefaults
         if let data = defaults?.data(forKey: "observedRateHistory"),
            let saved = try? JSONDecoder().decode(RadarAdaptiveHistory.self, from: data) {
             history = saved
         }
         history.prune(now: Date())
+        RadarEnvironment.readingStore?.update {
+            $0 = RadarReadingSnapshot()
+            $0.phase = "running"
+            $0.startedAt = Date()
+            $0.readStatus = "Aguardando imagem da tela"
+        }
         defaults?.set(true, forKey: "broadcastActive")
     }
-
     override func broadcastPaused() {
         RadarEnvironment.sharedDefaults?.set(false, forKey: "broadcastActive")
+        RadarEnvironment.readingStore?.update { $0.phase = "paused" }
     }
     override func broadcastResumed() {
         RadarEnvironment.sharedDefaults?.set(true, forKey: "broadcastActive")
+        RadarEnvironment.readingStore?.update { $0.phase = "running" }
     }
     override func broadcastFinished() {
         RadarEnvironment.sharedDefaults?.set(false, forKey: "broadcastActive")
+        RadarEnvironment.readingStore?.update { $0.phase = "stopped" }
     }
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
         guard sampleBufferType == .video,
-              ProcessInfo.processInfo.systemUptime - lastFrameAt >= 0.5,
-              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-
+              ProcessInfo.processInfo.systemUptime - lastFrameAt >= 0.75,
+              let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         lastFrameAt = ProcessInfo.processInfo.systemUptime
-        let startedAt = lastFrameAt
-        RadarEnvironment.sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "lastFrameAt")
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer)
-        do {
-            try handler.perform([request])
-            let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
-            guard !lines.isEmpty else { return }
-            let recognizedText = lines.joined(separator: "\n")
+        // Release Vision's temporary buffers at each frame, important in a
+        // memory-constrained broadcast extension.
+        autoreleasepool { process(pixels) }
+    }
 
-            switch RadarOfferParser.parse(recognizedText) {
-            case .incomplete:
-                RadarEnvironment.sharedDefaults?.set("Aguardando oferta completa e legível", forKey: "lastReadStatus")
-                return
-            case .complete(let offer):
-                let defaults = RadarEnvironment.sharedDefaults
-                let fuelCost = defaults?.double(forKey: "fuelCostPerKm") ?? 0.28
-                let target = defaults?.double(forKey: "targetNetPerHour") ?? 0
-                let now = Date()
-                let adaptiveTarget = history.target(base: target, now: now)
-                if observationGate.shouldDeliver(offer, now: now) {
-                    history.observe(offer, fuelPerKm: fuelCost > 0 ? fuelCost : 0.28, now: now)
-                    defaults?.set(try? JSONEncoder().encode(history), forKey: "observedRateHistory")
-                    defaults?.set(history.samples.count, forKey: "observedOfferCount")
-                }
-                defaults?.set(adaptiveTarget, forKey: "adaptiveTarget")
-                defaults?.set("Oferta completa reconhecida", forKey: "lastReadStatus")
-                defaults?.set(String(format: "R$ %.2f • %.0f min • %.1f km", offer.fare, offer.totalMinutes ?? 0, offer.totalKilometers ?? 0), forKey: "lastOfferSummary")
-                var settings = RadarDecisionSettings(
-                    fuelCostPerKilometer: fuelCost > 0 ? fuelCost : 0.28,
-                    targetNetPerHour: adaptiveTarget,
-                    preferredMinimumFare: 25
-                )
-                settings.idleMinutes = max(0, defaults?.double(forKey: "confirmedIdleMinutes") ?? 0)
-                let decision = RadarDecisionEngine.evaluate(offer, settings: settings)
-                let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
-                defaults?.set(elapsed, forKey: "lastProcessingSeconds")
-                defaults?.set(Date().timeIntervalSince1970, forKey: "lastOfferAt")
-                guard elapsed < 7 else { return }
-                if case .accept = decision, gate.shouldDeliver(offer, now: Date()) {
-                    deliver(decision, destination: offer.destination)
-                }
+    private func text(in pixels: CVPixelBuffer, level: VNRequestTextRecognitionLevel) throws -> String {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = level
+        request.recognitionLanguages = ["pt-BR", "en-US"]
+        request.usesLanguageCorrection = false
+        try VNImageRequestHandler(cvPixelBuffer: pixels).perform([request])
+        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+    }
+
+    private func status(_ message: String) {
+        RadarEnvironment.sharedDefaults?.set(message, forKey: "lastReadStatus")
+        RadarEnvironment.readingStore?.update { $0.readStatus = message }
+    }
+
+    private func process(_ pixels: CVPixelBuffer) {
+        let started = ProcessInfo.processInfo.systemUptime
+        let now = Date()
+        RadarEnvironment.readingStore?.update {
+            $0.phase = "running"
+            $0.lastFrameAt = now
+            $0.processingStartedAt = now
+            $0.frames += 1
+        }
+        defer {
+            let elapsed = ProcessInfo.processInfo.systemUptime - started
+            RadarEnvironment.sharedDefaults?.set(elapsed, forKey: "lastProcessingSeconds")
+            RadarEnvironment.readingStore?.update {
+                $0.lastProcessedAt = Date()
+                $0.processingSeconds = elapsed
             }
+        }
+        do {
+            let fast = RadarOfferParser.parse(try text(in: pixels, level: .fast))
+            guard case .complete(let candidate) = fast else {
+                if case .incomplete(let reason) = fast { status(reason) }
+                return
+            }
+            // Independently confirm the critical numbers in the same frame.
+            let accurate = RadarOfferParser.parse(try text(in: pixels, level: .accurate))
+            guard case .complete(let offer) = accurate, candidate.hasSameMeasurements(as: offer) else {
+                status("As duas leituras não confirmaram os mesmos números; aguardando nova imagem")
+                return
+            }
+            let elapsed = ProcessInfo.processInfo.systemUptime - started
+            guard elapsed < 7 else {
+                status("Processamento excedeu 7 segundos; alerta descartado")
+                return
+            }
+            evaluate(offer)
         } catch {
-            // Never invent data or alert the driver on a failed read.
-            RadarEnvironment.sharedDefaults?.set("Falha de leitura; aguardando novo quadro", forKey: "lastReadStatus")
+            status("Falha do OCR; tentando novamente no próximo quadro")
+        }
+    }
+
+    private func evaluate(_ offer: RadarOffer) {
+        let defaults = RadarEnvironment.sharedDefaults
+        let fuel = defaults?.double(forKey: "fuelCostPerKm") ?? 0.28
+        let target = defaults?.double(forKey: "targetNetPerHour") ?? 0
+        let now = Date()
+        let adaptiveTarget = history.target(base: target, now: now)
+        if observationGate.shouldDeliver(offer, now: now) {
+            history.observe(offer, fuelPerKm: fuel > 0 ? fuel : 0.28, now: now)
+            defaults?.set(try? JSONEncoder().encode(history), forKey: "observedRateHistory")
+            defaults?.set(history.samples.count, forKey: "observedOfferCount")
+        }
+        defaults?.set(adaptiveTarget, forKey: "adaptiveTarget")
+        let summary = String(format: "R$ %.2f • %.0f min • %.1f km",
+                             offer.fare, offer.totalMinutes ?? 0, offer.totalKilometers ?? 0)
+        defaults?.set(summary, forKey: "lastOfferSummary")
+        defaults?.set(now.timeIntervalSince1970, forKey: "lastOfferAt")
+        RadarEnvironment.readingStore?.update { $0.offerSummary = summary; $0.offerAt = now }
+        var settings = RadarDecisionSettings(fuelCostPerKilometer: fuel > 0 ? fuel : 0.28,
+            targetNetPerHour: adaptiveTarget, preferredMinimumFare: 25)
+        settings.idleMinutes = max(0, defaults?.double(forKey: "confirmedIdleMinutes") ?? 0)
+        let decision = RadarDecisionEngine.evaluate(offer, settings: settings)
+        switch decision {
+        case .accept:
+            status("Oferta confirmada nas duas leituras; aprovada pelo filtro após combustível")
+            if gate.shouldDeliver(offer, now: now) { deliver(decision, destination: offer.destination) }
+        case .reject(let reason, _, _):
+            status("Oferta confirmada e reprovada: " + reason)
+        case .insufficient(let reason):
+            status("Oferta confirmada, sem recomendação: " + reason)
         }
     }
 
     private func deliver(_ decision: RadarDecision, destination: String?) {
+        guard case .accept(let reason, let net, let netHour) = decision else { return }
         let content = UNMutableNotificationContent()
         content.sound = .default
-
-        switch decision {
-        case .accept(let reason, let net, let netHour):
-            content.title = "RADAR • PEGAR"
-            content.subtitle = String(format: "Após combustível R$ %.2f • R$ %.2f/h", net, netHour)
-            content.body = reason + (destination.map { "\nDestino: " + $0 } ?? "")
-        case .reject, .insufficient:
-            // Rejected or incomplete offers stay silent by design.
-            return
-        }
-
-        let notification = UNNotificationRequest(
-            identifier: "radar-offer-\(UUID().uuidString)",
-            content: content,
-            trigger: nil
-        )
-        UNUserNotificationCenter.current().add(notification) { error in
-            RadarEnvironment.sharedDefaults?.set(
-                error?.localizedDescription ?? "Agendada; entrega depende do iOS",
-                forKey: "lastNotificationStatus"
-            )
+        content.title = "RADAR • PEGAR"
+        content.subtitle = String(format: "Após combustível R$ %.2f • R$ %.2f/h", net, netHour)
+        content.body = reason + (destination.map { "\nDestino: " + $0 } ?? "")
+        let request = UNNotificationRequest(identifier: "radar-offer-\(UUID().uuidString)", content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request) { error in
+            let message = error?.localizedDescription ?? "Agendada; entrega depende do iOS"
+            RadarEnvironment.sharedDefaults?.set(message, forKey: "lastNotificationStatus")
+            RadarEnvironment.readingStore?.update { $0.notificationStatus = message }
         }
     }
 }

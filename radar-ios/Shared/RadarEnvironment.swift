@@ -11,11 +11,13 @@ enum RadarEnvironment {
     }
 
     static let groupIdentifier = groupIdentifier(from: Bundle.main.infoDictionary ?? [:])
-    static var sharedContainerAvailable: Bool {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupIdentifier) != nil
+    static let sharedContainerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupIdentifier)
+    static var sharedContainerAvailable: Bool { sharedContainerURL != nil }
+    static let readingStore: RadarReadingStore? = sharedContainerURL.map {
+        RadarReadingStore(url: $0.appendingPathComponent("reading-status.json"))
     }
-    static var sharedDefaults: UserDefaults? {
+    static let sharedDefaults: UserDefaults? = {
         guard sharedContainerAvailable else { return nil }
         return UserDefaults(suiteName: groupIdentifier)
-    }
+    }()
 }
