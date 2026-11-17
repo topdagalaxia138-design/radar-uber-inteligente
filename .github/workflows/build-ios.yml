@@ -49,6 +49,8 @@ jobs:
           cd build/sideload
           ditto -c -k --keepParent Payload RadarUber-resign.ipa
           shasum -a 256 RadarUber-resign.ipa > RadarUber-resign.ipa.sha256
+      - name: Validate packaged app and extension metadata
+        run: python3 radar-ios/scripts/verify_ipa.py build/sideload/RadarUber-resign.ipa
       - name: Preserve IPA for Windows installation experiment
         uses: actions/upload-artifact@v4
         with:
