@@ -4,7 +4,7 @@ struct RadarOfferGate {
     private var lastSeen: [String: Date] = [:]
     mutating func shouldDeliver(_ offer: RadarOffer, now: Date) -> Bool {
         lastSeen = lastSeen.filter { now.timeIntervalSince($0.value) < 45 }
-        let key = "\(offer.fare)|\(offer.pickupMinutes ?? -1)|\(offer.tripMinutes ?? -1)|\(offer.pickupKilometers ?? -1)|\(offer.tripKilometers ?? -1)"
+        let key = "\(offer.fare)|\(offer.pickupMinutes ?? -1)|\(offer.tripMinutes ?? -1)|\(offer.pickupKilometers ?? -1)|\(offer.tripKilometers ?? -1)|\(offer.destination ?? "")"
         guard lastSeen[key] == nil else { return false }
         lastSeen[key] = now
         return true

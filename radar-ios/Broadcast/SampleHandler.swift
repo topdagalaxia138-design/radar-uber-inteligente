@@ -70,6 +70,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 }
                 defaults?.set(adaptiveTarget, forKey: "adaptiveTarget")
                 defaults?.set("Oferta completa reconhecida", forKey: "lastReadStatus")
+                defaults?.set(String(format: "R$ %.2f • %.0f min • %.1f km", offer.fare, offer.totalMinutes ?? 0, offer.totalKilometers ?? 0), forKey: "lastOfferSummary")
                 var settings = RadarDecisionSettings(
                     fuelCostPerKilometer: fuelCost > 0 ? fuelCost : 0.28,
                     targetNetPerHour: adaptiveTarget,
@@ -82,7 +83,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 defaults?.set(Date().timeIntervalSince1970, forKey: "lastOfferAt")
                 guard elapsed < 7 else { return }
                 if case .accept = decision, gate.shouldDeliver(offer, now: Date()) {
-                    deliver(decision)
+                    deliver(decision, destination: offer.destination)
                 }
             }
         } catch {
@@ -91,7 +92,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
     }
 
-    private func deliver(_ decision: RadarDecision) {
+    private func deliver(_ decision: RadarDecision, destination: String?) {
         let content = UNMutableNotificationContent()
         content.sound = .default
 
@@ -99,7 +100,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         case .accept(let reason, let net, let netHour):
             content.title = "RADAR • PEGAR"
             content.subtitle = String(format: "Após combustível R$ %.2f • R$ %.2f/h", net, netHour)
-            content.body = reason
+            content.body = reason + (destination.map { "\nDestino: " + $0 } ?? "")
         case .reject, .insufficient:
             // Rejected or incomplete offers stay silent by design.
             return

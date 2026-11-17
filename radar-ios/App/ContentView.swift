@@ -18,6 +18,8 @@ struct ContentView: View {
     private var adaptiveTarget = 0.0
     @AppStorage("lastReadStatus", store: RadarEnvironment.sharedDefaults)
     private var lastReadStatus = "Nenhuma leitura realizada"
+    @AppStorage("lastOfferSummary", store: RadarEnvironment.sharedDefaults)
+    private var lastOfferSummary = ""
     @State private var notificationStatus = "Verificando autorização…"
 
     var body: some View {
@@ -45,7 +47,7 @@ struct ContentView: View {
                             .frame(width: 90)
                     }
                     HStack {
-                        Text("Meta líquida por hora (R$)")
+                        Text("Meta por hora após combustível (R$)")
                         Spacer()
                         TextField("Defina sua meta", value: $targetNetPerHour, format: .number.precision(.fractionLength(0)))
                             .keyboardType(.decimalPad)
@@ -63,6 +65,7 @@ struct ContentView: View {
                     Text("Permissão de compartilhamento ausente. A leitura não pode operar nesta instalação.")
                         .foregroundStyle(.red).font(.footnote)
                 }
+                Text("Transmissão de tela").font(.headline)
                 BroadcastPicker()
                     .frame(height: 52)
                     .disabled(!RadarEnvironment.sharedContainerAvailable)
@@ -84,6 +87,8 @@ struct ContentView: View {
                     .font(.caption)
                 Text(lastNotificationStatus).font(.caption)
                 Text(lastReadStatus).font(.caption)
+                if !lastOfferSummary.isEmpty { Text(lastOfferSummary).font(.headline) }
+                Text("Versão de teste: " + (Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")).font(.caption)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Aprendizado de ofertas").font(.headline)
                     Text("\(observedOfferCount) ofertas legíveis no histórico local")
@@ -125,6 +130,8 @@ private struct BroadcastPicker: UIViewRepresentable {
             }?.bundleIdentifier
         }
         picker.showsMicrophoneButton = false
+        picker.tintColor = .systemGreen
+        picker.overrideUserInterfaceStyle = .dark
         return picker
     }
 

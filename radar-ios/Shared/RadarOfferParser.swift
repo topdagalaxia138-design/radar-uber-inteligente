@@ -7,6 +7,7 @@ struct RadarOffer: Equatable {
     let pickupKilometers: Double?
     let tripKilometers: Double?
     let rawText: String
+    var destination: String? = nil
 
     var totalMinutes: Double? {
         guard let pickupMinutes, let tripMinutes else { return nil }
@@ -25,60 +26,79 @@ enum RadarParseResult {
 }
 
 enum RadarOfferParser {
-    // Conservative first-pass parser. Real offer layouts must be validated and tuned.
     static func parse(_ text: String) -> RadarParseResult {
-        let normalized = text
-            .replacingOccurrences(of: "\u{00A0}", with: " ")
+        let normalized = text.replacingOccurrences(of: "\u{00A0}", with: " ")
             .replacingOccurrences(of: ",", with: ".")
         let lines = normalized.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
 
-        guard let fare = firstMatch(#"R\$\s*(\d{1,4}(?:\.\d{2})?)"#, in: normalized)
-            .flatMap(Double.init), fare > 0 else {
-            return .incomplete("Não consegui identificar o valor da oferta.")
+        // Ignore unit prices, but never choose arbitrarily between two total fares.
+        let money = try! NSRegularExpression(pattern: #"R\$\s*(\d{1,4}(?:\.\d{2})?)(?![\d.])"#)
+        let source = normalized as NSString
+        let fares = money.matches(in: normalized, range: NSRange(location: 0, length: source.length)).compactMap { match -> Double? in
+            let tail = source.substring(from: match.range.location + match.range.length)
+            if tail.range(of: #"^\s*/\s*(km|min|h)\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
+                return nil
+            }
+            return Double(source.substring(with: match.range(at: 1)))
+        }
+        guard fares.count == 1, let fare = fares.first, fare.isFinite, fare > 0 else {
+            return .incomplete("Valor total ausente ou ambíguo.")
         }
 
-        let farePattern = try! NSRegularExpression(pattern: #"R\$\s*(\d{1,4}(?:\.\d{2})?)"#)
-        guard farePattern.numberOfMatches(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)) == 1 else {
-            return .incomplete("Mais de um valor na tela; oferta ambígua.")
-        }
-        let pickupLine = lines.first { line in
-            line.localizedCaseInsensitiveContains("buscar")
-            || line.localizedCaseInsensitiveContains("embarque")
-            || line.localizedCaseInsensitiveContains("até o passageiro")
-        }
-        let tripLine = lines.first { line in
-            line.localizedCaseInsensitiveContains("destino")
-            || line.localizedCaseInsensitiveContains("viagem")
-            || line.localizedCaseInsensitiveContains("chegada")
+        let pickup = lines.first {
+            $0.localizedCaseInsensitiveContains("buscar")
+                || $0.localizedCaseInsensitiveContains("embarque")
+                || $0.localizedCaseInsensitiveContains("até o passageiro")
+        }.flatMap(metrics)
+        let trip = lines.first {
+            $0.localizedCaseInsensitiveContains("destino")
+                || $0.localizedCaseInsensitiveContains("viagem")
+                || $0.localizedCaseInsensitiveContains("chegada")
+        }.flatMap(metrics)
+
+        if let pickup, let trip {
+            return .complete(RadarOffer(fare: fare, pickupMinutes: pickup.minutes,
+                tripMinutes: trip.minutes, pickupKilometers: pickup.km, tripKilometers: trip.km, rawText: text))
         }
 
-        let pickupKm = pickupLine.flatMap { firstMatch(#"(\d+(?:\.\d+)?)\s*km"#, in: $0) }.flatMap(Double.init)
-        let tripKm = tripLine.flatMap { firstMatch(#"(\d+(?:\.\d+)?)\s*km"#, in: $0) }.flatMap(Double.init)
-        let pickupMin = pickupLine.flatMap { firstMatch(#"(\d+(?:\.\d+)?)\s*min"#, in: $0) }.flatMap(Double.init)
-        let tripMin = tripLine.flatMap { firstMatch(#"(\d+(?:\.\d+)?)\s*min"#, in: $0) }.flatMap(Double.init)
-
-        guard let pickupKm, let tripKm, let pickupMin, let tripMin else {
-            return .incomplete("Oferta reconhecida, mas faltam distância ou tempo separados. Não vou chutar.")
+        // Observed UberX card: pickup row then trip row, without textual labels.
+        // Require the product, offer action and exactly two complete metric rows.
+        guard lines.contains(where: { $0.localizedCaseInsensitiveContains("UberX") }),
+              lines.contains(where: { $0.localizedCaseInsensitiveContains("Tenho interesse")
+                  || $0.localizedCaseInsensitiveContains("Aceitar") }) else {
+            return .incomplete("Tela não identificada como cartão de oferta compatível.")
         }
-
-        return .complete(RadarOffer(
-            fare: fare,
-            pickupMinutes: pickupMin,
-            tripMinutes: tripMin,
-            pickupKilometers: pickupKm,
-            tripKilometers: tripKm,
-            rawText: text
-        ))
+        let rows = lines.enumerated().compactMap { index, line -> (index: Int, minutes: Double, km: Double)? in
+            guard let value = metrics(line) else { return nil }
+            return (index, value.minutes, value.km)
+        }
+        guard rows.count == 2, rows[1].minutes > 0, rows[1].km > 0 else {
+            return .incomplete("Faltam as duas etapas de tempo e distância; não vou estimar.")
+        }
+        var offer = RadarOffer(fare: fare, pickupMinutes: rows[0].minutes,
+            tripMinutes: rows[1].minutes, pickupKilometers: rows[0].km, tripKilometers: rows[1].km, rawText: text)
+        let addressLines = lines.dropFirst(rows[1].index + 1)
+            .prefix { !$0.localizedCaseInsensitiveContains("Tenho interesse")
+                && !$0.localizedCaseInsensitiveContains("Aceitar") }
+            .prefix(2)
+        if !addressLines.isEmpty {
+            offer.destination = addressLines.joined(separator: ", ")
+        }
+        return .complete(offer)
     }
 
-    private static func firstMatch(_ pattern: String, in text: String) -> String? {
-        guard let range = text.range(of: pattern, options: .regularExpression),
-              let capture = text[range].range(of: #"(\d+(?:\.\d+)?)"#, options: .regularExpression) else {
-            return nil
-        }
-        return String(text[capture])
+    private static func metrics(_ text: String) -> (minutes: Double, km: Double)? {
+        let expression = try! NSRegularExpression(
+            pattern: #"(\d+(?:\.\d+)?)\s*min(?:utos?)?\s*[•·.\-–—]?\s*\(?\s*(\d+(?:\.\d+)?)\s*km\)?"#,
+            options: .caseInsensitive)
+        let source = text as NSString
+        let matches = expression.matches(in: text, range: NSRange(location: 0, length: source.length))
+        guard matches.count == 1, let match = matches.first,
+              let minutes = Double(source.substring(with: match.range(at: 1))),
+              let km = Double(source.substring(with: match.range(at: 2))),
+              minutes.isFinite, minutes >= 0, km.isFinite, km >= 0 else { return nil }
+        return (minutes, km)
     }
 }
 
