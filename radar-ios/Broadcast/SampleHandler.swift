@@ -56,18 +56,22 @@ final class SampleHandler: RPBroadcastSampleHandler {
         autoreleasepool { process(pixels) }
     }
 
-    private func text(in pixels: CVPixelBuffer, level: VNRequestTextRecognitionLevel) throws -> String {
+    private func text(in pixels: CVPixelBuffer, level: VNRequestTextRecognitionLevel, region: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1)) throws -> String {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = level
+        request.regionOfInterest = region
         request.recognitionLanguages = ["pt-BR", "en-US"]
         request.usesLanguageCorrection = false
         try VNImageRequestHandler(cvPixelBuffer: pixels).perform([request])
         return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
     }
 
-    private func status(_ message: String) {
+    private func status(_ message: String, forOfferAttempt: Bool = false) {
         RadarEnvironment.sharedDefaults?.set(message, forKey: "lastReadStatus")
-        RadarEnvironment.readingStore?.update { $0.readStatus = message }
+        RadarEnvironment.readingStore?.update {
+            $0.readStatus = message
+            if forOfferAttempt { $0.attemptStatus = message }
+        }
     }
 
     private func process(_ pixels: CVPixelBuffer) {
@@ -88,20 +92,26 @@ final class SampleHandler: RPBroadcastSampleHandler {
             }
         }
         do {
-            let fast = RadarOfferParser.parse(try text(in: pixels, level: .fast))
-            guard case .complete(let candidate) = fast else {
-                if case .incomplete(let reason) = fast { status(reason) }
-                return
+            let initial = try text(in: pixels, level: .fast)
+            let outcome = try RadarOfferReader.read(initialText: initial,
+                accurateFull: { try text(in: pixels, level: .accurate) },
+                accurateCard: { try text(in: pixels, level: .accurate,
+                    region: CGRect(x: 0, y: 0, width: 1, height: 0.75)) })
+            if outcome.attempted {
+                RadarEnvironment.readingStore?.update {
+                    $0.attemptAt = Date()
+                    $0.attemptStatus = outcome.reason
+                    $0.fullReadSummary = outcome.fullSummary
+                    $0.cardReadSummary = outcome.cardSummary
+                }
             }
-            // Independently confirm the critical numbers in the same frame.
-            let accurate = RadarOfferParser.parse(try text(in: pixels, level: .accurate))
-            guard case .complete(let offer) = accurate, candidate.hasSameMeasurements(as: offer) else {
-                status("As duas leituras não confirmaram os mesmos números; aguardando nova imagem")
+            guard let offer = outcome.offer else {
+                status(outcome.reason)
                 return
             }
             let elapsed = ProcessInfo.processInfo.systemUptime - started
             guard elapsed < 7 else {
-                status("Processamento excedeu 7 segundos; alerta descartado")
+                status("Processamento excedeu 7 segundos; alerta descartado", forOfferAttempt: true)
                 return
             }
             evaluate(offer)
@@ -133,12 +143,12 @@ final class SampleHandler: RPBroadcastSampleHandler {
         let decision = RadarDecisionEngine.evaluate(offer, settings: settings)
         switch decision {
         case .accept:
-            status("Oferta confirmada nas duas leituras; aprovada pelo filtro após combustível")
+            status("Oferta confirmada nas duas leituras precisas; aprovada pelo filtro após combustível", forOfferAttempt: true)
             if gate.shouldDeliver(offer, now: now) { deliver(decision, destination: offer.destination) }
         case .reject(let reason, _, _):
-            status("Oferta confirmada e reprovada: " + reason)
+            status("Oferta confirmada e reprovada: " + reason, forOfferAttempt: true)
         case .insufficient(let reason):
-            status("Oferta confirmada, sem recomendação: " + reason)
+            status("Oferta confirmada, sem recomendação: " + reason, forOfferAttempt: true)
         }
     }
 

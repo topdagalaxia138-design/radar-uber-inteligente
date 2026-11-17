@@ -12,6 +12,10 @@ struct RadarReadingSnapshot: Codable {
     var offerAt: Date?
     var notificationStatus = "Nenhuma notificação agendada"
     var processingSeconds: Double = 0
+    var attemptAt: Date?
+    var attemptStatus: String?
+    var fullReadSummary: String?
+    var cardReadSummary: String?
 
     func activity(at now: Date) -> String {
         if phase == "failed" { return "Leitura interrompida com erro" }

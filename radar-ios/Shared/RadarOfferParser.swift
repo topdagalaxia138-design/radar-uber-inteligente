@@ -36,6 +36,21 @@ enum RadarParseResult {
 }
 
 enum RadarOfferParser {
+    // This gate only chooses whether to attempt accurate OCR. It never approves
+    // an offer or supplies missing measurements.
+    static func mightContainOffer(_ text: String) -> Bool {
+        let normalized = text.replacingOccurrences(of: ",", with: ".")
+        let lines = normalized.components(separatedBy: .newlines)
+        let rows = lines.compactMap(metrics).count
+        let action = text.localizedCaseInsensitiveContains("Aceitar")
+            || text.localizedCaseInsensitiveContains("Tenho interesse")
+        let productLine = lines.contains {
+            $0.range(of: #"^\s*(Uber\s*X|Priority)(?:\s+Exclusivo)?\s*$"#,
+                     options: [.regularExpression, .caseInsensitive]) != nil
+        }
+        return action || ((rows >= 2 || productLine) && text.contains("R$"))
+    }
+
     static func parse(_ text: String) -> RadarParseResult {
         let normalized = text.replacingOccurrences(of: "\u{00A0}", with: " ")
             .replacingOccurrences(of: ",", with: ".")
@@ -89,7 +104,7 @@ enum RadarOfferParser {
 
         // Observed UberX/Priority card: pickup row then trip row, without textual labels.
         // Require the product, offer action and exactly two complete metric rows.
-        guard lines.contains(where: { ($0.localizedCaseInsensitiveContains("UberX") || $0.localizedCaseInsensitiveContains("Priority")) }),
+        guard lines.contains(where: { ($0.range(of: #"\bUber\s*X\b"#, options: [.regularExpression, .caseInsensitive]) != nil || $0.localizedCaseInsensitiveContains("Priority")) }),
               lines.contains(where: { $0.localizedCaseInsensitiveContains("Tenho interesse")
                   || $0.localizedCaseInsensitiveContains("Aceitar") }) else {
             return .incomplete("Tela não identificada como cartão de oferta compatível.")

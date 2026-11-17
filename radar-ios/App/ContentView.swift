@@ -89,6 +89,16 @@ struct ContentView: View {
                             Text(String(format: "Último OCR e decisão: %.2f s", reading.processingSeconds)).font(.caption)
                         }
                         Text(reading.notificationStatus).font(.caption)
+                        if let attempt = reading.attemptStatus {
+                            Divider()
+                            Text("Última tentativa de leitura de oferta").font(.subheadline.bold())
+                            Text(attempt).font(.caption)
+                            if let date = reading.attemptAt {
+                                Text("Tentativa há \(Int(max(0, clock.timeIntervalSince(date)))) s").font(.caption)
+                            }
+                            if let summary = reading.fullReadSummary { Text("Tela: " + summary).font(.caption) }
+                            if let summary = reading.cardReadSummary { Text("Cartão: " + summary).font(.caption) }
+                        }
                         if !reading.offerSummary.isEmpty {
                             Text("Última oferta confirmada").font(.caption)
                             Text(reading.offerSummary).font(.headline)
