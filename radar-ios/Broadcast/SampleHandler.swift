@@ -164,6 +164,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private func deliver(_ decision: RadarDecision, destination: String?) {
         guard let notice = RadarDecisionNotice(decision, destination: destination) else { return }
         let content = UNMutableNotificationContent()
+        content.categoryIdentifier = RadarNotifications.offerCategory
         content.sound = .default
         content.title = notice.title
         content.subtitle = notice.subtitle

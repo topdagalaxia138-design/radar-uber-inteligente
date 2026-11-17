@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var reading: RadarReadingSnapshot?
     @State private var clock = Date()
     @State private var testStatus = ""
+    @State private var carPlayStatus = "Verificando disponibilidade do CarPlay…"
     @State private var notificationStatus = "Verificando autorização…"
 
     var body: some View {
@@ -77,6 +78,15 @@ struct ContentView: View {
 
                 Label(notificationStatus, systemImage: "bell")
                     .font(.footnote)
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("CarPlay — preparação", systemImage: "car")
+                        .font(.headline)
+                    Text(carPlayStatus).font(.footnote)
+                    Text("Mantenha a Uber aberta no iPhone e Radar Leitura ativo. O Radar não captura a tela da central do carro.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Para conferir o aviso, conecte o CarPlay e use o teste de banner com o carro parado. A preparação não garante exibição na central.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }.padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
                 Label("O processamento OCR é local. A tela não é enviada para um servidor.", systemImage: "lock.shield")
                     .font(.footnote)
@@ -91,7 +101,7 @@ struct ContentView: View {
                         if age > 15 { Text(title).font(.headline) }
                         Text(reading.offerSummary)
                         if let detail = reading.decisionDetail { Text(detail).font(.subheadline) }
-                        Text("Leitura há \\(age) s. Não confirma disponibilidade nem corrida realizada.")
+                        Text("Leitura há \(age) s. Não confirma disponibilidade nem corrida realizada.")
                             .font(.caption)
                     }
                     .padding().frame(maxWidth: .infinity, alignment: .leading)
@@ -181,6 +191,7 @@ struct ContentView: View {
             return
         }
         let content = UNMutableNotificationContent()
+        content.categoryIdentifier = RadarNotifications.testCategory
         content.title = "RADAR • TESTE DE AVISO"
         content.body = "Teste de apresentação. Não é recomendação de corrida."
         content.sound = .default
@@ -196,6 +207,12 @@ struct ContentView: View {
     @MainActor
     private func refreshNotificationStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.carPlaySetting {
+        case .enabled: carPlayStatus = RadarCarPlayAvailability.enabled.message
+        case .disabled: carPlayStatus = RadarCarPlayAvailability.disabled.message
+        case .notSupported: carPlayStatus = RadarCarPlayAvailability.unsupported.message
+        @unknown default: carPlayStatus = RadarCarPlayAvailability.unsupported.message
+        }
         if settings.authorizationStatus == .authorized {
             notificationStatus = settings.alertSetting == .enabled
                 ? "Notificações autorizadas; alertas permitidos"
