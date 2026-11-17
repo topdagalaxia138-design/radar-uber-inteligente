@@ -11,7 +11,12 @@ enum RadarEnvironment {
     }
 
     static let groupIdentifier = groupIdentifier(from: Bundle.main.infoDictionary ?? [:])
+    #if os(Linux)
+    // Linux CI validates the pure core without inventing an iOS App Group container.
+    static let sharedContainerURL: URL? = nil
+    #else
     static let sharedContainerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupIdentifier)
+    #endif
     static var sharedContainerAvailable: Bool { sharedContainerURL != nil }
     static let readingStore: RadarReadingStore? = sharedContainerURL.map {
         RadarReadingStore(url: $0.appendingPathComponent("reading-status.json"))

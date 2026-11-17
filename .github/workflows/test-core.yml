@@ -1,0 +1,23 @@
+name: Test Radar Core
+on:
+  push:
+    paths:
+      - "radar-ios/**"
+      - ".github/workflows/test-core.yml"
+  pull_request:
+    paths:
+      - "radar-ios/**"
+      - ".github/workflows/test-core.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    container: swift:6.0-noble
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test parsing, decisions and weekly ledger
+        working-directory: radar-ios
+        run: swift test
