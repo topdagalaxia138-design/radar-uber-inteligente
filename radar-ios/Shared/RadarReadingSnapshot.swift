@@ -1,6 +1,10 @@
 import Foundation
 
 struct RadarReadingSnapshot: Codable {
+    var decisionAccepted: Bool?
+    var decisionTitle: String?
+    var decisionDetail: String?
+    var decisionAt: Date?
     var phase = "stopped"
     var startedAt: Date?
     var lastFrameAt: Date?

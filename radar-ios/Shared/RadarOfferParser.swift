@@ -164,7 +164,7 @@ enum RadarDecisionEngine {
               let kilometers = offer.totalKilometers, kilometers > 0,
               settings.fuelCostPerKilometer >= 0,
               settings.targetNetPerHour > 0 else {
-            return .insufficient(reason: "Dados ou meta líquida por hora ainda não configurados.")
+            return .insufficient(reason: "Dados ou meta por hora após combustível ainda não configurados.")
         }
 
         guard offer.fare.isFinite, minutes.isFinite, kilometers.isFinite,
@@ -190,11 +190,11 @@ enum RadarDecisionEngine {
         if netPerHour >= threshold {
             let special = offer.fare >= max(50, settings.preferredMinimumFare * 2)
             let note = special ? (settings.idleMinutes >= 10 ? "Oportunidade de valor elevado após ociosidade; rentabilidade acima da meta." : "Oportunidade de valor elevado; rentabilidade acima da meta.") : offer.fare >= settings.preferredMinimumFare
-                ? "Lucro por hora acima da sua meta."
+                ? "Valor por hora após combustível acima da meta."
                 : "Abaixo de R$ 25, mas com rentabilidade excepcional."
             return .accept(reason: note, estimatedNet: net, netPerHour: netPerHour)
         }
 
-        return .reject(reason: "Lucro por hora abaixo da meta configurada.", estimatedNet: net, netPerHour: netPerHour)
+        return .reject(reason: "Valor por hora após combustível abaixo da meta configurada.", estimatedNet: net, netPerHour: netPerHour)
     }
 }

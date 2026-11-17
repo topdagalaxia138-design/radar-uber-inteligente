@@ -141,25 +141,34 @@ final class SampleHandler: RPBroadcastSampleHandler {
             targetNetPerHour: adaptiveTarget, preferredMinimumFare: 25)
         settings.idleMinutes = max(0, defaults?.double(forKey: "confirmedIdleMinutes") ?? 0)
         let decision = RadarDecisionEngine.evaluate(offer, settings: settings)
+        if let notice = RadarDecisionNotice(decision, destination: offer.destination) {
+            RadarEnvironment.readingStore?.update {
+                $0.decisionAccepted = notice.accepted
+                $0.decisionTitle = notice.title
+                $0.decisionDetail = notice.subtitle
+                $0.decisionAt = now
+            }
+        }
         switch decision {
         case .accept:
             status("Oferta confirmada nas duas leituras precisas; aprovada pelo filtro após combustível", forOfferAttempt: true)
             if gate.shouldDeliver(offer, now: now) { deliver(decision, destination: offer.destination) }
         case .reject(let reason, _, _):
             status("Oferta confirmada e reprovada: " + reason, forOfferAttempt: true)
+            if gate.shouldDeliver(offer, now: now) { deliver(decision, destination: offer.destination) }
         case .insufficient(let reason):
             status("Oferta confirmada, sem recomendação: " + reason, forOfferAttempt: true)
         }
     }
 
     private func deliver(_ decision: RadarDecision, destination: String?) {
-        guard case .accept(let reason, let net, let netHour) = decision else { return }
+        guard let notice = RadarDecisionNotice(decision, destination: destination) else { return }
         let content = UNMutableNotificationContent()
         content.sound = .default
-        content.title = "RADAR • PEGAR"
-        content.subtitle = String(format: "Após combustível R$ %.2f • R$ %.2f/h", net, netHour)
-        content.body = reason + (destination.map { "\nDestino: " + $0 } ?? "")
-        let request = UNNotificationRequest(identifier: "radar-offer-\(UUID().uuidString)", content: content, trigger: nil)
+        content.title = notice.title
+        content.subtitle = notice.subtitle
+        content.body = notice.body
+        let request = UNNotificationRequest(identifier: "radar-latest-offer", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
             let message = error?.localizedDescription ?? "Agendada; entrega depende do iOS"
             RadarEnvironment.sharedDefaults?.set(message, forKey: "lastNotificationStatus")

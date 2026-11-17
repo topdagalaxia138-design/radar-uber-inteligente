@@ -61,6 +61,10 @@ struct ContentView: View {
                     Text("Permissão de compartilhamento ausente. A leitura não pode operar nesta instalação.")
                         .foregroundStyle(.red).font(.footnote)
                 }
+                Text("Teste real: análise após combustível")
+                    .font(.headline)
+                Text("Aluguel, Passe e saldo semanal ainda não entram nesta recomendação.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Text("Transmissão de tela").font(.headline)
                 BroadcastPicker()
                     .frame(width: 60, height: 60)
@@ -79,6 +83,21 @@ struct ContentView: View {
                     .padding()
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
+                if let reading, let title = reading.decisionTitle, let date = reading.decisionAt {
+                    let age = Int(max(0, clock.timeIntervalSince(date)))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(age <= 15 ? title : "Última decisão • histórico")
+                            .font(.title2.bold())
+                        if age > 15 { Text(title).font(.headline) }
+                        Text(reading.offerSummary)
+                        if let detail = reading.decisionDetail { Text(detail).font(.subheadline) }
+                        Text("Leitura há \\(age) s. Não confirma disponibilidade nem corrida realizada.")
+                            .font(.caption)
+                    }
+                    .padding().frame(maxWidth: .infinity, alignment: .leading)
+                    .background((reading.decisionAccepted == true ? Color.green : Color.red).opacity(0.22),
+                                in: RoundedRectangle(cornerRadius: 12))
+                }
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Atividade da leitura").font(.headline)
                     if let reading {
@@ -113,6 +132,11 @@ struct ContentView: View {
                     Text("Versão de teste: " + (Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")).font(.caption)
                 }.padding().frame(maxWidth: .infinity, alignment: .leading)
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                Button("Abrir ajustes de notificações") {
+                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }.buttonStyle(.bordered)
                 Button("Testar banner em 3 segundos") {
                     Task { await testBanner() }
                 }.buttonStyle(.borderedProminent)
