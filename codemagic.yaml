@@ -1,0 +1,50 @@
+# Manual builds only. Personal Codemagic account, free M2 quota.
+# No Apple credentials or distribution certificates are uploaded.
+workflows:
+  radar-ios-altserver:
+    name: Radar iOS - IPA para AltServer Windows
+    instance_type: mac_mini_m2
+    max_build_duration: 20
+    environment:
+      xcode: latest
+    scripts:
+      - name: Preparar XcodeGen e projeto
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR"
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen generate --spec radar-ios/project.yml --project radar-ios
+      - name: Testar calculos e leitura
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR/radar-ios"
+          swift test
+      - name: Compilar aplicativo e extensao para iPhone
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR"
+          xcodebuild -project radar-ios/RadarUber.xcodeproj -scheme RadarUber -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device CODE_SIGNING_ALLOWED=NO build
+      - name: Empacotar IPA para assinatura local no Windows
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR"
+          mkdir -p build/sideload/Payload
+          cp -R build/device/Build/Products/Debug-iphoneos/RadarUber.app build/sideload/Payload/
+          codesign --force --sign - --entitlements radar-ios/Broadcast/RadarBroadcast.entitlements --generate-entitlement-der build/sideload/Payload/RadarUber.app/PlugIns/RadarBroadcast.appex
+          codesign --force --sign - --entitlements radar-ios/App/RadarUber.entitlements --generate-entitlement-der build/sideload/Payload/RadarUber.app
+          codesign --verify --deep --strict build/sideload/Payload/RadarUber.app
+          cd build/sideload
+          ditto -c -k --keepParent Payload RadarUber-resign.ipa
+          shasum -a 256 RadarUber-resign.ipa > RadarUber-resign.ipa.sha256
+      - name: Validar IPA e registrar versao
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR"
+          python3 radar-ios/scripts/verify_ipa.py build/sideload/RadarUber-resign.ipa
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' build/sideload/Payload/RadarUber.app/Info.plist > build/sideload/version.txt
+    artifacts:
+      - build/sideload/RadarUber-resign.ipa
+      - build/sideload/RadarUber-resign.ipa.sha256
+      - build/sideload/version.txt
