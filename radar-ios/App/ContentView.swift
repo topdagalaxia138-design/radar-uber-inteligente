@@ -62,6 +62,11 @@ struct ContentView: View {
                     Text("Permissão de compartilhamento ausente. A leitura não pode operar nesta instalação.")
                         .foregroundStyle(.red).font(.footnote)
                 }
+                NavigationLink {
+                    RadarWeeklyPlanView()
+                } label: {
+                    Label("Minha semana: aluguel, Passe e 80 corridas", systemImage: "chart.bar")
+                }.buttonStyle(.borderedProminent)
                 Text("Teste real: análise após combustível")
                     .font(.headline)
                 Text("Aluguel, Passe e saldo semanal ainda não entram nesta recomendação.")
@@ -93,19 +98,19 @@ struct ContentView: View {
                     .padding()
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
-                if let reading, let title = reading.decisionTitle, let date = reading.decisionAt {
-                    let age = Int(max(0, clock.timeIntervalSince(date)))
+                if let record = reading?.decisionRecord {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(age <= 15 ? title : "Última decisão • histórico")
+                        Text(record.isRecent(at: clock) ? record.title : "Última decisão • histórico")
                             .font(.title2.bold())
-                        if age > 15 { Text(title).font(.headline) }
-                        Text(reading.offerSummary)
-                        if let detail = reading.decisionDetail { Text(detail).font(.subheadline) }
-                        Text("Leitura há \(age) s. Não confirma disponibilidade nem corrida realizada.")
+                        if !record.isRecent(at: clock) { Text(record.title).font(.headline) }
+                        Text(record.summary)
+                        Text(record.detail).font(.subheadline)
+                        Text(record.noticeMessage ?? "Preparando aviso desta oferta").font(.caption)
+                        Text("Confirmada há \(Int(max(0, clock.timeIntervalSince(record.firstConfirmedAt)))) s; não confirma disponibilidade nem corrida realizada.")
                             .font(.caption)
                     }
                     .padding().frame(maxWidth: .infinity, alignment: .leading)
-                    .background((reading.decisionAccepted == true ? Color.green : Color.red).opacity(0.22),
+                    .background((record.accepted ? Color.green : Color.red).opacity(0.22),
                                 in: RoundedRectangle(cornerRadius: 12))
                 }
                 VStack(alignment: .leading, spacing: 8) {
@@ -117,7 +122,9 @@ struct ContentView: View {
                         if reading.lastProcessedAt != nil {
                             Text(String(format: "Último OCR e decisão: %.2f s", reading.processingSeconds)).font(.caption)
                         }
-                        Text(reading.notificationStatus).font(.caption)
+                        if reading.decisionRecord == nil {
+                            Text("Nenhum aviso vinculado a uma oferta nesta sessão").font(.caption)
+                        }
                         if let attempt = reading.attemptStatus {
                             Divider()
                             Text("Última tentativa de leitura de oferta").font(.subheadline.bold())

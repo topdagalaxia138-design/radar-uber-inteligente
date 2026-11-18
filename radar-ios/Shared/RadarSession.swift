@@ -4,10 +4,11 @@ struct RadarOfferGate {
     private var lastSeen: [String: Date] = [:]
     mutating func shouldDeliver(_ offer: RadarOffer, now: Date) -> Bool {
         lastSeen = lastSeen.filter { now.timeIntervalSince($0.value) < 45 }
-        let key = "\(offer.fare)|\(offer.pickupMinutes ?? -1)|\(offer.tripMinutes ?? -1)|\(offer.pickupKilometers ?? -1)|\(offer.tripKilometers ?? -1)|\(offer.destination ?? "")"
-        guard lastSeen[key] == nil else { return false }
+        let key = offer.identityKey
+        let firstAppearance = lastSeen[key] == nil
+        // Keep a continuously visible card suppressed, even after 45 seconds.
         lastSeen[key] = now
-        return true
+        return firstAppearance
     }
 }
 
@@ -61,4 +62,18 @@ struct RadarWeeklyLedger: Codable {
     var rentalRemaining: Double { max(0, rental - rentalCredits) }
     var net: Double { received - weeklyTrips.reduce(0) { $0 + $1.fuel } - rental }
     var tripsToMinimumBenefit: Int { max(0, 80 - weeklyTrips.count) }
+}
+
+
+extension RadarOffer {
+    var identityKey: String {
+        "\(fare)|\(pickupMinutes ?? -1)|\(tripMinutes ?? -1)|\(pickupKilometers ?? -1)|\(tripKilometers ?? -1)|\(destination ?? "")"
+    }
+}
+
+extension RadarOffer {
+    // Diagnostic key deliberately excludes addresses and raw OCR.
+    var measurementKey: String {
+        "\(fare)|\(pickupMinutes ?? -1)|\(tripMinutes ?? -1)|\(pickupKilometers ?? -1)|\(tripKilometers ?? -1)"
+    }
 }

@@ -5,7 +5,6 @@ import CoreVideo
 
 final class SampleHandler: RPBroadcastSampleHandler {
     private var gate = RadarOfferGate()
-    private var observationGate = RadarOfferGate()
     private var history = RadarAdaptiveHistory()
     private var lastFrameAt = -Double.infinity
 
@@ -17,7 +16,6 @@ final class SampleHandler: RPBroadcastSampleHandler {
             return
         }
         gate = RadarOfferGate()
-        observationGate = RadarOfferGate()
         lastFrameAt = -Double.infinity
         let defaults = RadarEnvironment.sharedDefaults
         if let data = defaults?.data(forKey: "observedRateHistory"),
@@ -122,58 +120,60 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     private func evaluate(_ offer: RadarOffer) {
         let defaults = RadarEnvironment.sharedDefaults
-        let fuel = defaults?.double(forKey: "fuelCostPerKm") ?? 0.28
+        let configuredFuel = defaults?.double(forKey: "fuelCostPerKm") ?? 0.28
+        let fuel = configuredFuel > 0 ? configuredFuel : 0.28
         let target = defaults?.double(forKey: "targetNetPerHour") ?? 0
         let now = Date()
         let adaptiveTarget = history.target(base: target, now: now)
-        if observationGate.shouldDeliver(offer, now: now) {
-            history.observe(offer, fuelPerKm: fuel > 0 ? fuel : 0.28, now: now)
-            defaults?.set(try? JSONEncoder().encode(history), forKey: "observedRateHistory")
-            defaults?.set(history.samples.count, forKey: "observedOfferCount")
-        }
-        defaults?.set(adaptiveTarget, forKey: "adaptiveTarget")
-        let summary = String(format: "R$ %.2f • %.0f min • %.1f km",
-                             offer.fare, offer.totalMinutes ?? 0, offer.totalKilometers ?? 0)
-        defaults?.set(summary, forKey: "lastOfferSummary")
-        defaults?.set(now.timeIntervalSince1970, forKey: "lastOfferAt")
-        RadarEnvironment.readingStore?.update { $0.offerSummary = summary; $0.offerAt = now }
-        var settings = RadarDecisionSettings(fuelCostPerKilometer: fuel > 0 ? fuel : 0.28,
+        var settings = RadarDecisionSettings(fuelCostPerKilometer: fuel,
             targetNetPerHour: adaptiveTarget, preferredMinimumFare: 25)
         settings.idleMinutes = max(0, defaults?.double(forKey: "confirmedIdleMinutes") ?? 0)
         let decision = RadarDecisionEngine.evaluate(offer, settings: settings)
-        if let notice = RadarDecisionNotice(decision, destination: offer.destination) {
-            RadarEnvironment.readingStore?.update {
-                $0.decisionAccepted = notice.accepted
-                $0.decisionTitle = notice.title
-                $0.decisionDetail = notice.subtitle
-                $0.decisionAt = now
+        guard let notice = RadarDecisionNotice(decision, destination: offer.destination) else {
+            if case .insufficient(let reason) = decision {
+                status("Oferta confirmada, sem recomendação: " + reason, forOfferAttempt: true)
             }
+            return
         }
-        switch decision {
-        case .accept:
-            status("Oferta confirmada nas duas leituras precisas; aprovada pelo filtro após combustível", forOfferAttempt: true)
-            if gate.shouldDeliver(offer, now: now) { deliver(decision, destination: offer.destination) }
-        case .reject(let reason, _, _):
-            status("Oferta confirmada e reprovada: " + reason, forOfferAttempt: true)
-            if gate.shouldDeliver(offer, now: now) { deliver(decision, destination: offer.destination) }
-        case .insufficient(let reason):
-            status("Oferta confirmada, sem recomendação: " + reason, forOfferAttempt: true)
+        guard gate.shouldDeliver(offer, now: now) else {
+            RadarEnvironment.readingStore?.update {
+                if $0.decisionRecord?.offerKey == offer.measurementKey {
+                    $0.decisionRecord?.lastSeenAt = now
+                }
+            }
+            return
         }
+        history.observe(offer, fuelPerKm: fuel, now: now)
+        defaults?.set(try? JSONEncoder().encode(history), forKey: "observedRateHistory")
+        defaults?.set(history.samples.count, forKey: "observedOfferCount")
+        defaults?.set(adaptiveTarget, forKey: "adaptiveTarget")
+        let summary = String(format: "R$ %.2f • %.0f min • %.1f km",
+                             offer.fare, offer.totalMinutes ?? 0, offer.totalKilometers ?? 0)
+        let record = RadarDecisionRecord(id: UUID().uuidString, offerKey: offer.measurementKey,
+            summary: summary, title: notice.title, detail: notice.subtitle,
+            accepted: notice.accepted, firstConfirmedAt: now, lastSeenAt: now)
+        defaults?.set(summary, forKey: "lastOfferSummary")
+        defaults?.set(now.timeIntervalSince1970, forKey: "lastOfferAt")
+        RadarEnvironment.readingStore?.update { $0.beginDecision(record) }
+        status(notice.accepted ? "Oferta confirmada; aprovada após combustível"
+                              : "Oferta confirmada; reprovada após combustível", forOfferAttempt: true)
+        deliver(notice, recordID: record.id)
     }
 
-    private func deliver(_ decision: RadarDecision, destination: String?) {
-        guard let notice = RadarDecisionNotice(decision, destination: destination) else { return }
+    private func deliver(_ notice: RadarDecisionNotice, recordID: String) {
         let content = UNMutableNotificationContent()
         content.categoryIdentifier = RadarNotifications.offerCategory
         content.sound = .default
         content.title = notice.title
         content.subtitle = notice.subtitle
         content.body = notice.body
+        content.threadIdentifier = "radar-offers"
+        content.userInfo = ["radarDecisionID": recordID]
         let request = UNNotificationRequest(identifier: "radar-latest-offer", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
-            let message = error?.localizedDescription ?? "Agendada; entrega depende do iOS"
-            RadarEnvironment.sharedDefaults?.set(message, forKey: "lastNotificationStatus")
-            RadarEnvironment.readingStore?.update { $0.notificationStatus = message }
+            RadarEnvironment.readingStore?.update {
+                $0.markNotice(recordID: recordID, error: error?.localizedDescription, at: Date())
+            }
         }
     }
 }
