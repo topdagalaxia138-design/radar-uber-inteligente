@@ -91,6 +91,26 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
         do {
             let initial = try text(in: pixels, level: .fast)
+            if RadarFinanceParser.mightContainFinancialScreen(initial) {
+                let firstText = try text(in: pixels, level: .accurate)
+                let secondText = try text(in: pixels, level: .accurate)
+                let first = RadarFinanceParser.parse(firstText, now: now)
+                let second = RadarFinanceParser.parse(secondText, now: now)
+                let message: String
+                if let reading = RadarFinanceState.confirmedReading(first, second),
+                   ProcessInfo.processInfo.systemUptime - started < 7 {
+                    let saved = RadarEnvironment.financeStore?.observe(reading, at: Date()) == true
+                    message = saved ? "Leitura financeira atualizada automaticamente: " + reading.screen
+                                    : "Não foi possível salvar a leitura financeira"
+                } else {
+                    message = "Tela financeira não reconhecida com segurança; nenhum valor importado"
+                }
+                RadarEnvironment.readingStore?.update {
+                    $0.financeReadStatus = message
+                    $0.readStatus = message
+                }
+                return
+            }
             let outcome = try RadarOfferReader.read(initialText: initial,
                 accurateFull: { try text(in: pixels, level: .accurate) },
                 accurateCard: { try text(in: pixels, level: .accurate,

@@ -119,6 +119,9 @@ struct ContentView: View {
                         Text(reading.activity(at: clock)).font(.subheadline.bold())
                         Text("Quadros recebidos para análise: \(reading.frames)").font(.caption)
                         Text(reading.readStatus).font(.caption)
+                        if let financeStatus = reading.financeReadStatus {
+                            Text(financeStatus).font(.caption)
+                        }
                         if reading.lastProcessedAt != nil {
                             Text(String(format: "Último OCR e decisão: %.2f s", reading.processingSeconds)).font(.caption)
                         }
@@ -169,7 +172,7 @@ struct ContentView: View {
                     Text("Após 20 ofertas, o filtro pode subir até 25% acima da sua meta. Nunca reduz sua meta. Esse histórico não confirma corridas realizadas nem ganhos.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                Text("Tempo desde a aparição da oferta e entrega da notificação ainda precisam ser medidos no iPhone. Finanças automáticas e Zarp Super ainda sem fonte conectada.")
+                Text("Tempo total de entrega do aviso ainda precisa ser medido. A leitura financeira automática inicial depende das telas reconhecidas e visíveis; não há conexão direta com a conta Uber.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
             }

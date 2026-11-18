@@ -5,22 +5,15 @@ struct RadarWeeklyPlanView: View {
     @AppStorage("monthlyPersonalGoal", store: RadarEnvironment.sharedDefaults) private var monthlyGoal = 1000.0
     @AppStorage("plannedWorkDays", store: RadarEnvironment.sharedDefaults) private var days = 7
     @AppStorage("plannedHoursPerDay", store: RadarEnvironment.sharedDefaults) private var hours = 6.0
-    @AppStorage("weeklyPassBudgetKnown", store: RadarEnvironment.sharedDefaults) private var passKnown = false
-    @AppStorage("weeklyPassBudget", store: RadarEnvironment.sharedDefaults) private var passBudget = 0.0
+
+    @State private var finance = RadarFinanceState()
+    @State private var clock = Date()
+    @State private var financeStatus = "Abra uma tela de ganhos ou saldo na Uber com Radar Leitura ativo."
 
     private var plan: RadarWeeklyPlan {
         RadarWeeklyPlan(rental: rental, monthlyPersonalGoal: monthlyGoal,
-                        workDays: days, hoursPerDay: hours, passBudget: passKnown ? passBudget : nil)
+                        workDays: days, hoursPerDay: hours, passBudget: nil)
     }
-    private var overview: RadarWeeklyOverview {
-        var ledger: RadarWeeklyLedger?
-        if let data = RadarEnvironment.sharedDefaults?.data(forKey: "confirmedWeeklyLedger") {
-            ledger = try? JSONDecoder().decode(RadarWeeklyLedger.self, from: data)
-            ledger?.referenceDate = nil
-        }
-        return RadarWeeklyOverview(plan: plan, ledger: ledger)
-    }
-
     var body: some View {
         Form {
             Section("Planejamento — configure uma vez") {
@@ -38,20 +31,8 @@ struct RadarWeeklyPlanView: View {
                 }
                 Stepper("Dias planejados por semana: \(days)", value: $days, in: 1...7)
                 Stepper("Horas planejadas por dia: \(Int(hours))", value: $hours, in: 1...6, step: 1)
-                Toggle("Informei a previsão semanal do Passe", isOn: $passKnown)
-                if passKnown {
-                    HStack {
-                        Text("Previsão do Passe na semana")
-                        Spacer()
-                        TextField("Valor", value: $passBudget, format: .number)
-                            .keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 100)
-                    }
-                    Text("Informe zero somente se não houver esse custo. Previsão não confirma pagamento nem validade do Passe.")
-                        .font(.caption)
-                } else {
-                    Text("Custo do Passe ainda não informado; não será tratado como zero.")
-                        .font(.caption)
-                }
+                Text("Preço do Passe: leitura automática na tela correspondente. O preço unitário não é convertido em despesa semanal sem confirmação de compra.")
+                    .font(.caption)
                 if let goal = plan.weeklyPersonalGoal, let totalHours = plan.plannedHours {
                     valueRow("Meta pessoal equivalente por semana", goal)
                     Text(String(format: "Jornada planejada: %.0f h por semana", totalHours))
@@ -64,25 +45,63 @@ struct RadarWeeklyPlanView: View {
                         .font(.caption)
                 }
             }
-            Section("Semana — somente valores confirmados") {
-                if overview.ledger == nil {
-                    Text("Ganhos e abatimentos ainda não sincronizados")
-                        .font(.headline)
-                    Text("Não vou mostrar zero como se não houvesse ganhos. A fonte de corridas concluídas e lançamentos da Uber ainda precisa ser conectada.")
+            Section("Leitura financeira automática") {
+                Text(financeStatus).font(.footnote)
+                Text("Com Radar Leitura ligado, os valores são atualizados quando você abre as telas reconhecidas da Uber. Não é preciso enviar extratos ou cadastrar viagens.")
+                    .font(.caption)
+                ForEach(RadarFinanceMetric.allCases, id: \.rawValue) { metric in
+                    VStack(alignment: .leading, spacing: 3) {
+                        let observation = finance.latest(metric, now: clock)
+                        if metric == .weeklyTrips {
+                            HStack {
+                                Text(metric.label)
+                                Spacer()
+                                Text(observation.map { String(Int($0.value)) } ?? "Ainda não lido")
+                                    .foregroundStyle(observation == nil ? Color.secondary : Color.primary)
+                            }
+                        } else {
+                            valueRow(metric.label, observation?.value)
+                        }
+                        if let observation {
+                            Text("Lido em " + observation.observedAt.formatted(date: .abbreviated, time: .shortened)
+                                 + " • tela " + observation.screen)
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
                 }
-                valueRow("Ganhos registrados", overview.confirmedReceived)
-                valueRow("Dinheiro e maquininha registrados", overview.cashAndOwnTerminal)
-                valueRow("Créditos digitais registrados", overview.digitalCredits)
-                valueRow("Combustível das viagens registradas", overview.registeredFuel)
-                valueRow("Aluguel restante estimado pelos registros", overview.estimatedRentalRemaining)
-                if let count = overview.registeredTrips {
-                    Text("Corridas concluídas registradas: \(count)")
-                    Text("Registros podem ser parciais; confira o total oficial da Uber.")
+                Text("São valores observados na tela, não acesso direto à conta. Um saldo negativo não é classificado como aluguel sem um rótulo explícito. Ler um preço do Passe não confirma compra.")
+                    .font(.caption)
+            }
+            Section("Lançamentos capturados — parcial") {
+                let captured = finance.capturedThisWeek(now: clock)
+                let passDebits = captured.filter { $0.kind == .passDebit }.reduce(0) { $0 - $1.amount }
+                let rentalDebits = captured.filter { $0.kind == .rentalDebit }.reduce(0) { $0 - $1.amount }
+                let rentalCredits = captured.filter { $0.kind == .rentalCredit }.reduce(0) { $0 + $1.amount }
+                valueRow("Cobranças do Passe capturadas", captured.contains(where: { $0.kind == .passDebit }) ? passDebits : nil)
+                valueRow("Débitos Localiza capturados", captured.contains(where: { $0.kind == .rentalDebit }) ? rentalDebits : nil)
+                valueRow("Créditos Localiza capturados", captured.contains(where: { $0.kind == .rentalCredit }) ? rentalCredits : nil)
+                Text("Somente linhas com data, hora e valor reconhecidos. A lista pode estar incompleta; não é o total oficial da semana nem o saldo restante do aluguel.")
+                    .font(.caption)
+                ForEach(captured.prefix(12)) { movement in
+                    VStack(alignment: .leading, spacing: 3) {
+                        valueRow(movement.kind.label, movement.amount)
+                        Text(movement.occurredAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                Text("Um lançamento de viagem em dinheiro não informa quanto você recebeu em mãos. Nenhuma linha deste extrato é somada como nova corrida concluída.")
+                    .font(.caption)
+            }
+            Section("Objetivo de 80 corridas") {
+                if let trips = finance.latest(.weeklyTrips, now: clock) {
+                    Text("Viagens exibidas nesta semana: \(Int(trips.value))")
+                    Text("Faltam \(max(0, 80 - Int(trips.value))) para a meta de 80")
+                    Text("Contagem lida na tela da Uber; benefício depende das regras e confirmação da Zarp.")
+                        .font(.caption)
                 } else {
-                    Text("Corridas concluídas: não sincronizadas")
+                    Text("Aguardando leitura da contagem desta semana na Uber")
                 }
-                Text("Meta semanal: 80 corridas concluídas")
-                Text("Ofertas lidas não contam como corridas feitas, ganhos ou benefício confirmado. O benefício Zarp depende da confirmação no contrato/extrato.")
+                Text("Ofertas analisadas não são usadas como viagens concluídas. A semana anterior não é somada à atual.")
                     .font(.caption)
             }
             Section("Como interpretar o saldo") {
@@ -90,6 +109,15 @@ struct RadarWeeklyPlanView: View {
                 Text("Pagamentos digitais pela Uber podem compor a retenção. O saldo oficial também pode conter taxas e ajustes: confira os lançamentos antes de atribuir tudo ao aluguel.")
                 Text("A previsão do aluguel não é o saldo oficial da Uber. O Radar não cobra aluguel novamente nem confirma que ele foi quitado.")
                     .font(.caption)
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                clock = Date()
+                finance = RadarEnvironment.financeStore?.load() ?? RadarFinanceState()
+                financeStatus = RadarEnvironment.readingStore?.load()?.financeReadStatus
+                    ?? "Abra uma tela de ganhos ou saldo na Uber com Radar Leitura ativo."
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
         .navigationTitle("Minha semana")
@@ -105,7 +133,7 @@ struct RadarWeeklyPlanView: View {
                 Text(value, format: .currency(code: "BRL"))
                     .multilineTextAlignment(.trailing)
             } else {
-                Text("Não confirmado").foregroundStyle(.secondary)
+                Text("Ainda não lido").foregroundStyle(.secondary)
                     .multilineTextAlignment(.trailing)
             }
         }

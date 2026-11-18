@@ -1,6 +1,7 @@
 import Foundation
 
 struct RadarReadingSnapshot: Codable {
+    var financeReadStatus: String?
     var decisionRecord: RadarDecisionRecord?
     var decisionAccepted: Bool?
     var decisionTitle: String?
