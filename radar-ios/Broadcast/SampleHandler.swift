@@ -46,7 +46,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
         guard sampleBufferType == .video,
-              ProcessInfo.processInfo.systemUptime - lastFrameAt >= 0.75,
+              ProcessInfo.processInfo.systemUptime - lastFrameAt >= 0.35,
               let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         lastFrameAt = ProcessInfo.processInfo.systemUptime
         // Release Vision's temporary buffers at each frame, important in a
@@ -90,9 +90,9 @@ final class SampleHandler: RPBroadcastSampleHandler {
             }
         }
         do {
-            let initial = try text(in: pixels, level: .fast)
+            let initial = try text(in: pixels, level: .accurate)
             if RadarFinanceParser.mightContainFinancialScreen(initial) {
-                let firstText = try text(in: pixels, level: .accurate)
+                let firstText = initial
                 let secondText = try text(in: pixels, level: .accurate)
                 let first = RadarFinanceParser.parse(firstText, now: now)
                 let second = RadarFinanceParser.parse(secondText, now: now)
@@ -112,7 +112,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 return
             }
             let outcome = try RadarOfferReader.read(initialText: initial,
-                accurateFull: { try text(in: pixels, level: .accurate) },
+                accurateFull: { initial },
                 accurateCard: { try text(in: pixels, level: .accurate,
                     region: CGRect(x: 0, y: 0, width: 1, height: 0.75)) })
             if outcome.attempted {
@@ -128,8 +128,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 return
             }
             let elapsed = ProcessInfo.processInfo.systemUptime - started
-            guard elapsed < 7 else {
-                status("Processamento excedeu 7 segundos; alerta descartado", forOfferAttempt: true)
+            guard elapsed < 2.5 else {
+                status("Leitura demorou mais de 2,5 segundos; aviso descartado para evitar atraso", forOfferAttempt: true)
                 return
             }
             evaluate(offer)
@@ -140,8 +140,12 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     private func evaluate(_ offer: RadarOffer) {
         let defaults = RadarEnvironment.sharedDefaults
-        let configuredFuel = defaults?.double(forKey: "fuelCostPerKm") ?? 0.28
-        let fuel = configuredFuel > 0 ? configuredFuel : 0.28
+        guard let price = defaults?.double(forKey: "fuelPricePerLiter"), price > 0,
+              let consumption = defaults?.double(forKey: "fuelKilometersPerLiter"),
+              let fuel = RadarFuelCost.perKilometer(pricePerLiter: price, kilometersPerLiter: consumption) else {
+            status("Confirme preço por litro e consumo real no Radar antes de recomendar corridas", forOfferAttempt: true)
+            return
+        }
         let target = defaults?.double(forKey: "targetNetPerHour") ?? 0
         let now = Date()
         let adaptiveTarget = history.target(base: target, now: now)
@@ -167,6 +171,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
         defaults?.set(try? JSONEncoder().encode(history), forKey: "observedRateHistory")
         defaults?.set(history.samples.count, forKey: "observedOfferCount")
         defaults?.set(adaptiveTarget, forKey: "adaptiveTarget")
+        let offerLabel = String(format: "Oferta R$ %.2f • %.0f min • %.1f km", offer.fare,
+                                offer.totalMinutes ?? 0, offer.totalKilometers ?? 0)
         let summary = String(format: "R$ %.2f • %.0f min • %.1f km",
                              offer.fare, offer.totalMinutes ?? 0, offer.totalKilometers ?? 0)
         let record = RadarDecisionRecord(id: UUID().uuidString, offerKey: offer.measurementKey,
@@ -177,16 +183,16 @@ final class SampleHandler: RPBroadcastSampleHandler {
         RadarEnvironment.readingStore?.update { $0.beginDecision(record) }
         status(notice.accepted ? "Oferta confirmada; aprovada após combustível"
                               : "Oferta confirmada; reprovada após combustível", forOfferAttempt: true)
-        deliver(notice, recordID: record.id)
+        deliver(notice, recordID: record.id, offerLabel: offerLabel)
     }
 
-    private func deliver(_ notice: RadarDecisionNotice, recordID: String) {
+    private func deliver(_ notice: RadarDecisionNotice, recordID: String, offerLabel: String) {
         let content = UNMutableNotificationContent()
         content.categoryIdentifier = RadarNotifications.offerCategory
         content.sound = .default
         content.title = notice.title
         content.subtitle = notice.subtitle
-        content.body = notice.body
+        content.body = offerLabel + "\n" + notice.body
         content.threadIdentifier = "radar-offers"
         content.userInfo = ["radarDecisionID": recordID]
         let request = UNNotificationRequest(identifier: "radar-latest-offer", content: content, trigger: nil)

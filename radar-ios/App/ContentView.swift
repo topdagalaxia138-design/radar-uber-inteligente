@@ -12,6 +12,10 @@ struct ContentView: View {
     private var observedOfferCount = 0
     @AppStorage("adaptiveTarget", store: RadarEnvironment.sharedDefaults)
     private var adaptiveTarget = 0.0
+    @AppStorage("fuelPricePerLiter", store: RadarEnvironment.sharedDefaults)
+    private var fuelPricePerLiter = 0.0
+    @AppStorage("fuelKilometersPerLiter", store: RadarEnvironment.sharedDefaults)
+    private var fuelKilometersPerLiter = 9.0
     @Environment(\.scenePhase) private var scenePhase
     @State private var reading: RadarReadingSnapshot?
     @State private var clock = Date()
@@ -36,13 +40,25 @@ struct ContentView: View {
                     Text("Configuração inicial")
                         .font(.headline)
                     HStack {
-                        Text("Custo de combustível por km")
+                        Text("Preço atual por litro (R$)")
                         Spacer()
-                        TextField("0,28", value: $fuelCostPerKm, format: .number.precision(.fractionLength(2)))
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 90)
+                        TextField("Informe", value: $fuelPricePerLiter, format: .number.precision(.fractionLength(2)))
+                            .keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 100)
                     }
+                    HStack {
+                        Text("Consumo real (km/l)")
+                        Spacer()
+                        TextField("9", value: $fuelKilometersPerLiter, format: .number.precision(.fractionLength(1)))
+                            .keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 100)
+                    }
+                    if let cost = RadarFuelCost.perKilometer(pricePerLiter: fuelPricePerLiter, kilometersPerLiter: fuelKilometersPerLiter) {
+                        Text(String(format: "Combustível estimado: R$ %.3f/km", cost))
+                    } else {
+                        Text("Informe o preço do combustível e o consumo real. Sem isso, o Radar não recomenda PEGAR.")
+                            .foregroundStyle(.red).font(.caption)
+                    }
+                    Text("Se o consumo varia de 9 a 11 km/l, use 9 para uma estimativa conservadora. Ao trocar de combustível, atualize preço e consumo.")
+                        .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Text("Meta por hora após combustível (R$)")
                         Spacer()

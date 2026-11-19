@@ -57,7 +57,7 @@ enum RadarFinanceParser {
             || $0 == "aceitar" || $0 == "tenho interesse"
         }) { return false }
         let headings = ["ganhos", "resumo dos ganhos", "detalhes dos ganhos", "carteira",
-                        "saldo", "aluguel", "retencao de aluguel", "passe", "passe uber"]
+                        "saldo", "aluguel", "retencao de aluguel", "passe", "passe uber", "detalhamento", "estatisticas"]
         return lines.contains(where: { headings.contains($0) || $0.hasPrefix("saldo •") || $0.hasPrefix("saldo ·") })
     }
 
@@ -72,12 +72,22 @@ enum RadarFinanceParser {
         let isRental = lines.contains("aluguel") || lines.contains("retencao de aluguel")
         let isPass = lines.contains("passe") || lines.contains("passe uber")
         let earningsPage = lines.contains("ganhos") || lines.contains("resumo dos ganhos") || lines.contains("detalhes dos ganhos")
+            || lines.contains("detalhamento") || lines.contains("estatisticas")
         let currentWeek = showsCurrentWeek(lines, now: now)
         var values: [RadarFinanceMetric: Double] = [:]
 
         if earningsPage && currentWeek {
             values[.weeklyEarnings] = money(after: ["ganhos liquidos", "total de ganhos", "ganhos totais", "ganhos"], in: lines)
-            values[.weeklyTrips] = count(after: ["viagens", "viagens concluidas", "corridas concluidas"], in: lines)
+            values[.weeklyTrips] = tripCount(in: lines)
+            if values[.weeklyEarnings] == nil, lines.contains("estatisticas"),
+               values[.weeklyTrips] != nil {
+                let datePattern = #"\d{1,2}\s+de\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)"#
+                if let index = lines.firstIndex(where: { $0.range(of: datePattern, options: .regularExpression) != nil
+                    && ($0.contains("-") || $0.contains("–")) }),
+                   index + 1 < lines.count {
+                    values[.weeklyEarnings] = currency(lines[index + 1])
+                }
+            }
             values[.cashReceived] = money(after: ["dinheiro recebido", "recebido em dinheiro"], in: lines)
             values[.digitalEarnings] = money(after: ["ganhos em pagamentos digitais", "ganhos digitais"], in: lines)
             values[.rentalRetained] = money(after: ["valor retido para aluguel", "aluguel retido"], in: lines)
@@ -102,7 +112,7 @@ enum RadarFinanceParser {
         }
 
         // Negative values are valid for wallet balances, not for received income or counts.
-        values = values.filter { $0.value.isFinite && ($0.key == .walletBalance || $0.key == .rentalPending || $0.value >= 0) }
+        values = values.filter { $0.value.isFinite && ($0.key == .walletBalance || $0.key == .rentalPending || $0.key == .weeklyEarnings || $0.value >= 0) }
         let movements = isWallet ? RadarWalletParser.parse(lines, now: now) : []
         guard !values.isEmpty || !movements.isEmpty else { return nil }
         return RadarFinanceReading(screen: isWallet ? "Carteira" : isRental ? "Aluguel" : isPass ? "Passe" : "Ganhos",
@@ -120,7 +130,8 @@ enum RadarFinanceParser {
         let monday = calendar.dateInterval(of: .weekOfYear, for: now)!.start
         let expression = try! NSRegularExpression(pattern: #"(\d{1,2})\s*(?:de\s+)?(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\.?"#)
         let months = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
-        for line in lines where line.contains("-") || line.contains("–") || line.contains(" a ") {
+        let candidates = lines + zip(lines, lines.dropFirst()).map { $0 + " " + $1 }
+        for line in candidates where line.contains("-") || line.contains("–") || line.contains(" a ") {
             let source = line as NSString
             let matches = expression.matches(in: line, range: NSRange(location: 0, length: source.length))
             guard matches.count == 2 else { continue }
@@ -178,6 +189,21 @@ enum RadarFinanceParser {
         if amount.contains(",") { amount = amount.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".") }
         guard let value = Double(amount), value.isFinite else { return nil }
         return firstSign == "-" || secondSign == "-" ? -value : value
+    }
+
+    private static func tripCount(in lines: [String]) -> Double? {
+        var values: [Double] = []
+        if let labeled = count(after: ["viagens", "viagens concluidas", "corridas concluidas"], in: lines) {
+            values.append(labeled)
+        }
+        let expression = try! NSRegularExpression(pattern: #"^(\d{1,4})\s+viagens$"#)
+        for line in lines {
+            let source = line as NSString
+            if let match = expression.firstMatch(in: line, range: NSRange(location: 0, length: source.length)),
+               let value = Double(source.substring(with: match.range(at: 1))) { values.append(value) }
+        }
+        let unique = Set(values)
+        return unique.count == 1 ? unique.first : nil
     }
 
     private static func count(after labels: [String], in lines: [String]) -> Double? {

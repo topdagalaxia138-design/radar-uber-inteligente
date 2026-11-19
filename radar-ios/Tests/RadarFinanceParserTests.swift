@@ -13,6 +13,32 @@ final class RadarFinanceParserTests: XCTestCase {
         XCTAssertEqual(reading?.weekKey, "2026-11-16")
         XCTAssertNil(RadarFinanceParser.parse(text.replacingOccurrences(of: "Esta semana", with: "Hoje"), now: now))
     }
+    func testInlineTripCountAndNegativeTotal() {
+        let text = "Uber Driver\nGanhos\n16 de nov. - 23 de nov.\n26 viagens\nGanhos totais\n-R$ 300,00"
+        let reading = RadarFinanceParser.parse(text, now: now)
+        XCTAssertEqual(reading?.values[.weeklyTrips], 26)
+        XCTAssertEqual(reading?.values[.weeklyEarnings], -300)
+    }
+    func testWrappedWeekRange() {
+        let text = "Uber Driver\nGanhos\n16 de nov. - 23\nde nov.\nViagens\n26"
+        XCTAssertEqual(RadarFinanceParser.parse(text, now: now)?.values[.weeklyTrips], 26)
+    }
+    func testConflictingInlineCountsAreNotImported() {
+        let text = "Uber\nGanhos\nEsta semana\n26 viagens\n27 viagens"
+        XCTAssertNil(RadarFinanceParser.parse(text, now: now))
+    }
+    func testStatisticsPageTotalAndSplitCount() {
+        let text = "Uber Conta\n16 de nov. - 23 de nov.\n-R$ 300,00\nEstatísticas\nViagens\n26"
+        let reading = RadarFinanceParser.parse(text, now: now)
+        XCTAssertEqual(reading?.values[.weeklyEarnings], -300)
+        XCTAssertEqual(reading?.values[.weeklyTrips], 26)
+    }
+    func testExpandedDetailDoesNotCountRentalAsIncome() {
+        let text = "Uber\n16 de nov. - 23 de nov.\nDetalhamento\nOutras taxas\n-R$ 800,00\nGanhos totais\n-R$ 300,00"
+        let reading = RadarFinanceParser.parse(text, now: now)
+        XCTAssertEqual(reading?.values[.weeklyEarnings], -300)
+        XCTAssertNil(reading?.values[.cashReceived])
+    }
     func testPastWeekDoesNotBecomeCurrentIncome() {
         let text = "Uber\nGanhos\nSemana passada\nTotal de ganhos\nR$ 600,00\nViagens\n10"
         XCTAssertNil(RadarFinanceParser.parse(text, now: now))
@@ -62,9 +88,10 @@ final class RadarFinanceParserTests: XCTestCase {
     func testOfferIsNotFinancialSource() {
         XCTAssertFalse(RadarFinanceParser.mightContainFinancialScreen("UberX\nR$29,00\nGanhos\nAceitar"))
     }
-    func testNegativeEarningsAndFractionalTripsAreRejected() {
+    func testNegativeWeeklyResultIsPreservedButFractionalTripsAreRejected() {
         let reading = RadarFinanceParser.parse("Uber\nGanhos\nEsta semana\nGanhos líquidos\n-R$10,00\nViagens\n1,5", now: now)
-        XCTAssertNil(reading)
+        XCTAssertEqual(reading?.values[.weeklyEarnings], -10)
+        XCTAssertNil(reading?.values[.weeklyTrips])
     }
     func testBothAccurateReadsMustAgree() {
         let first = RadarFinanceParser.parse("Uber\nCarteira\nSaldo\nR$10,00", now: now)
