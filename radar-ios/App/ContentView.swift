@@ -51,7 +51,7 @@ struct ContentView: View {
                             .multilineTextAlignment(.trailing)
                             .frame(width: 125)
                     }
-                    Text("A meta é configurada uma vez. Sem ela, o Radar não libera recomendações de PEGAR.")
+                    Text("Corridas abaixo de R$ 25 usam a mesma meta das demais: retorno por minuto após combustível. Sem meta, o Radar não libera PEGAR.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -184,14 +184,14 @@ enum RadarDecisionEngine {
             return .reject(reason: "O combustível estimado consome o valor da corrida.", estimatedNet: net, netPerHour: netPerHour)
         }
 
-        let threshold = offer.fare < settings.preferredMinimumFare
-            ? settings.targetNetPerHour * settings.exceptionalMultiplier
-            : settings.targetNetPerHour
+        // Fare size never raises the profitability requirement: short trips
+        // compete on the same fuel-adjusted return per minute as long trips.
+        let threshold = settings.targetNetPerHour
         if netPerHour >= threshold {
             let special = offer.fare >= max(50, settings.preferredMinimumFare * 2)
             let note = special ? (settings.idleMinutes >= 10 ? "Oportunidade de valor elevado após ociosidade; rentabilidade acima da meta." : "Oportunidade de valor elevado; rentabilidade acima da meta.") : offer.fare >= settings.preferredMinimumFare
                 ? "Valor por hora após combustível acima da meta."
-                : "Abaixo de R$ 25, mas com rentabilidade excepcional."
+                : "Corrida de valor baixo com retorno por minuto após combustível acima da meta."
             return .accept(reason: note, estimatedNet: net, netPerHour: netPerHour)
         }
 

@@ -6,7 +6,7 @@ final class RadarCoreTests: XCTestCase {
         RadarOffer(fare: fare, pickupMinutes: 10, tripMinutes: 20,
                    pickupKilometers: 2, tripKilometers: 10, rawText: "")
     }
-    func testOnlyExceptionalSmallFaresPass() {
+    func testFaresAreComparedAgainstSameHourlyTarget() {
         let settings = RadarDecisionSettings(fuelCostPerKilometer: 0.28, targetNetPerHour: 40, preferredMinimumFare: 25)
         if case .accept = RadarDecisionEngine.evaluate(offer(), settings: settings) {} else { XCTFail() }
         if case .reject = RadarDecisionEngine.evaluate(offer(24), settings: settings) {} else { XCTFail() }

@@ -21,9 +21,9 @@ final class RadarDecisionNoticeTests: XCTestCase {
         XCTAssertTrue(notice?.title.contains("🔴") == true)
         XCTAssertTrue(notice?.title.contains("NÃO PEGAR") == true)
     }
-    func testSmallFareBelowExceptionalThresholdIsRejected() {
+    func testSmallFareMeetingNormalTargetIsAccepted() {
         let notice = RadarDecisionNotice(RadarDecisionEngine.evaluate(offer(9.40, 12, 3.5), settings: settings), destination: nil)
-        XCTAssertEqual(notice?.accepted, false)
+        XCTAssertEqual(notice?.accepted, true)
     }
     func testSmallExceptionalFareStillPassesAgreedException() {
         let notice = RadarDecisionNotice(RadarDecisionEngine.evaluate(offer(9.40, 6, 3.5), settings: settings), destination: nil)

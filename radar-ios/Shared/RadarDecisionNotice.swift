@@ -20,7 +20,7 @@ struct RadarDecisionNotice {
             return nil
         }
         title = accepted ? "🟢 RADAR • PEGAR" : "🔴 RADAR • NÃO PEGAR"
-        subtitle = String(format: "Após combustível R$ %.2f • R$ %.2f/h", net, hourly)
+        subtitle = String(format: "Após combustível R$ %.2f • R$ %.2f/min", net, hourly / 60)
         body = reason + (destination.map { "\nDestino: " + $0 } ?? "")
     }
 }
