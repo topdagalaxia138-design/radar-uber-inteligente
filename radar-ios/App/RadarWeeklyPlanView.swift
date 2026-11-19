@@ -124,6 +124,7 @@ struct RadarWeeklyPlanView: View {
         .background(Color(red: 0.025, green: 0.045, blue: 0.075))
         .preferredColorScheme(.dark)
         .tint(Color(red: 0.30, green: 0.94, blue: 0.66))
+        .toolbar(.visible, for: .navigationBar)
         .navigationTitle("Minha semana")
         .navigationBarTitleDisplayMode(.inline)
     }
