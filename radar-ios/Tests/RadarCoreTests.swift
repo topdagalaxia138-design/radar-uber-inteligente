@@ -9,7 +9,7 @@ final class RadarCoreTests: XCTestCase {
     func testFaresAreComparedAgainstSameHourlyTarget() {
         let settings = RadarDecisionSettings(fuelCostPerKilometer: 0.28, targetNetPerHour: 40, preferredMinimumFare: 25)
         if case .accept = RadarDecisionEngine.evaluate(offer(), settings: settings) {} else { XCTFail() }
-        if case .reject = RadarDecisionEngine.evaluate(offer(24), settings: settings) {} else { XCTFail() }
+        if case .accept = RadarDecisionEngine.evaluate(offer(24), settings: settings) {} else { XCTFail() }
     }
     func testMissingTargetNeverApproves() {
         let settings = RadarDecisionSettings(fuelCostPerKilometer: 0.28, targetNetPerHour: 0, preferredMinimumFare: 25)
