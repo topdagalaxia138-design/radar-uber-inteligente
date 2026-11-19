@@ -26,13 +26,8 @@ struct RadarAdaptiveHistory: Codable {
     }
 
     func target(base: Double, now: Date) -> Double {
-        guard base.isFinite, base > 0 else { return base }
-        let rates = samples.filter { $0.date <= now && now.timeIntervalSince($0.date) <= 7 * 24 * 3600 }
-            .map(\.netPerHour).filter { $0.isFinite && $0 > 0 }.sorted()
-        // Require a sample before adapting. Never lower the configured floor,
-        // and never increase it by more than 25% from offer observations alone.
-        guard rates.count >= 20 else { return base }
-        let percentile = rates[Int(Double(rates.count - 1) * 0.6)]
-        return max(base, min(base * 1.25, percentile))
+        // Observed offers do not prove realized profit or demand. Keep the
+        // configured target instead of silently rejecting more offers.
+        return base
     }
 }

@@ -68,10 +68,10 @@ final class RadarAdaptiveHistoryTests: XCTestCase {
         for _ in 0..<19 { history.observe(sample(100), fuelPerKm: 0.28, now: date) }
         XCTAssertEqual(history.target(base: 40, now: date), 40)
     }
-    func testGoodOfferHistoryRaisesThresholdWithinBound() {
+    func testGoodOfferHistoryDoesNotSilentlyRaiseTarget() {
         var history = RadarAdaptiveHistory()
         for _ in 0..<20 { history.observe(sample(100), fuelPerKm: 0.28, now: date) }
-        XCTAssertEqual(history.target(base: 40, now: date), 50)
+        XCTAssertEqual(history.target(base: 40, now: date), 40)
     }
     func testPoorOffersNeverLowerFloor() {
         var history = RadarAdaptiveHistory()
@@ -89,7 +89,7 @@ final class RadarAdaptiveHistoryTests: XCTestCase {
         let saved = try JSONEncoder().encode(history)
         let restored = try JSONDecoder().decode(RadarAdaptiveHistory.self, from: saved)
         XCTAssertEqual(restored.samples.count, 500)
-        XCTAssertEqual(restored.target(base: 40, now: date), 50)
+        XCTAssertEqual(restored.target(base: 40, now: date), 40)
     }
 }
 

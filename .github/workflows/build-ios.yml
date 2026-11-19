@@ -39,23 +39,26 @@ jobs:
           path: build/device/Build/Products/Debug-iphoneos/
           if-no-files-found: error
       - name: Package IPA for local re-signing
+        id: package
         shell: bash
         run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' radar-ios/App/Info.plist)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           mkdir -p build/sideload/Payload
           cp -R build/device/Build/Products/Debug-iphoneos/RadarUber.app build/sideload/Payload/
           codesign --force --sign - --entitlements radar-ios/Broadcast/RadarBroadcast.entitlements --generate-entitlement-der build/sideload/Payload/RadarUber.app/PlugIns/RadarBroadcast.appex
           codesign --force --sign - --entitlements radar-ios/App/RadarUber.entitlements --generate-entitlement-der build/sideload/Payload/RadarUber.app
           codesign --verify --deep --strict build/sideload/Payload/RadarUber.app
           cd build/sideload
-          ditto -c -k --keepParent Payload RadarUber-resign.ipa
-          shasum -a 256 RadarUber-resign.ipa > RadarUber-resign.ipa.sha256
+          ditto -c -k --keepParent Payload RadarUber-v${version}.ipa
+          shasum -a 256 RadarUber-v${version}.ipa > RadarUber-v${version}.ipa.sha256
       - name: Validate packaged app and extension metadata
-        run: python3 radar-ios/scripts/verify_ipa.py build/sideload/RadarUber-resign.ipa
+        run: python3 radar-ios/scripts/verify_ipa.py build/sideload/RadarUber-v${{ steps.package.outputs.version }}.ipa
       - name: Preserve IPA for Windows installation experiment
         uses: actions/upload-artifact@v4
         with:
-          name: RadarUber-resign-IPA
+          name: RadarUber-v${{ steps.package.outputs.version }}-IPA
           path: |
-            build/sideload/RadarUber-resign.ipa
-            build/sideload/RadarUber-resign.ipa.sha256
+            build/sideload/RadarUber-v${{ steps.package.outputs.version }}.ipa
+            build/sideload/RadarUber-v${{ steps.package.outputs.version }}.ipa.sha256
           if-no-files-found: error

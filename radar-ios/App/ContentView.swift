@@ -166,10 +166,10 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Aprendizado de ofertas").font(.headline)
                     Text("\(observedOfferCount) ofertas legíveis no histórico local")
-                    if adaptiveTarget > 0 {
-                        Text(String(format: "Filtro atual: R$ %.2f/h após combustível", adaptiveTarget))
+                    if targetNetPerHour > 0 {
+                        Text(String(format: "Filtro: R$ %.2f/min após combustível", targetNetPerHour / 60))
                     }
-                    Text("Após 20 ofertas, o filtro pode subir até 25% acima da sua meta. Nunca reduz sua meta. Esse histórico não confirma corridas realizadas nem ganhos.")
+                    Text("A meta configurada não sobe pelo histórico de ofertas. Corridas curtas e longas usam o mesmo retorno por minuto após combustível. O histórico não confirma corridas realizadas nem ganhos.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 Text("Tempo total de entrega do aviso ainda precisa ser medido. A leitura financeira automática inicial depende das telas reconhecidas e visíveis; não há conexão direta com a conta Uber.")
