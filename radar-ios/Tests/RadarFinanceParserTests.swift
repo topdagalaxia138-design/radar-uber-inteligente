@@ -66,6 +66,13 @@ final class RadarFinanceParserTests: XCTestCase {
         XCTAssertNil(reading?.values[.rentalPending])
         XCTAssertNil(reading?.values[.weeklyEarnings])
     }
+    func testOverviewPendingWalletBalanceDoesNotBecomeRentalOrCash() {
+        let text = "Ganhos\nCarteira\nUber Conta\nSaldo pendente de -R$ 321,45"
+        let reading = RadarFinanceParser.parse(text, now: now)
+        XCTAssertEqual(reading?.values[.walletBalance], -321.45)
+        XCTAssertNil(reading?.values[.rentalPending])
+        XCTAssertNil(reading?.values[.cashReceived])
+    }
     func testCompactSaldoHeaderDoesNotSelectTripRowValue() {
         let reading = RadarFinanceParser.parse("Saldo • -R$512,34\nUberX\nR$18,00\n12:10", now: now)
         XCTAssertEqual(reading?.values[.walletBalance], -512.34)

@@ -56,7 +56,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     }
     override func broadcastFinished() {
         RadarEnvironment.sharedDefaults?.set(false, forKey: "broadcastActive")
-        RadarEnvironment.readingStore?.update { $0.phase = "stopped" }
+        RadarEnvironment.readingStore?.update { if !stoppedForHeat { $0.phase = "stopped" } }
     }
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
@@ -67,17 +67,17 @@ final class SampleHandler: RPBroadcastSampleHandler {
         let level = thermal.rawValue
         let thermalLabel = level == 0 ? "Normal" : level == 1 ? "Elevado — modo econômico"
             : level == 2 ? "Sério — leitura reduzida" : "Crítico — leitura interrompida"
-        if level >= 3 {
+        if RadarRuntimePolicy.shouldStopForHeat(thermalLevel: level) {
             guard !stoppedForHeat else { return }
             stoppedForHeat = true
             RadarEnvironment.readingStore?.update {
                 $0.phase = "failed"
-                $0.readStatus = "Leitura interrompida por estado térmico crítico; aguarde o iPhone esfriar"
+                $0.readStatus = "Leitura interrompida por estado térmico sério ou crítico; aguarde o iPhone esfriar"
                 $0.runtimeEvent("thermal_stop", thermalLabel)
                 $0.runtime?.thermal = thermalLabel
             }
             finishBroadcastWithError(NSError(domain: "RadarThermal", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "O iPhone informou estado térmico crítico. Aguarde esfriar antes de reiniciar Radar Leitura."
+                NSLocalizedDescriptionKey: "O iPhone informou estado térmico sério ou crítico. Aguarde esfriar antes de reiniciar Radar Leitura."
             ]))
             return
         }
@@ -99,6 +99,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
         lastFrameAt = now
         lastFingerprint = fingerprint
+        // Rest is measured after OCR finishes, preventing back-to-back expensive reads.
+        defer { lastFrameAt = ProcessInfo.processInfo.systemUptime }
         autoreleasepool { process(pixels) }
     }
 

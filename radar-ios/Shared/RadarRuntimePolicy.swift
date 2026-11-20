@@ -3,12 +3,14 @@ import Foundation
 enum RadarRuntimePolicy {
     static func frameInterval(thermalLevel: Int) -> Double {
         switch thermalLevel {
-        case 1: return 0.9
-        case 2: return 1.8
+        case 1: return 1.2
+        case 2: return .infinity
         case 3: return .infinity
         default: return 0.6
         }
     }
+    static func shouldStopForHeat(thermalLevel: Int) -> Bool { thermalLevel >= 2 }
+
     static func needsAccurateRead(offer: Bool, payment: Bool, finance: Bool,
                                   secondsSinceFallback: Double) -> Bool {
         offer || payment || finance || secondsSinceFallback >= 3

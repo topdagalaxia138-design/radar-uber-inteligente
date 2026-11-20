@@ -7,6 +7,12 @@ final class RadarRuntimePolicyTests: XCTestCase {
         XCTAssertLessThan(RadarRuntimePolicy.frameInterval(thermalLevel: 1), RadarRuntimePolicy.frameInterval(thermalLevel: 2))
         XCTAssertEqual(RadarRuntimePolicy.frameInterval(thermalLevel: 3), .infinity)
     }
+    func testThermalProtectionStopsBeforeCriticalState() {
+        XCTAssertFalse(RadarRuntimePolicy.shouldStopForHeat(thermalLevel: 0))
+        XCTAssertFalse(RadarRuntimePolicy.shouldStopForHeat(thermalLevel: 1))
+        XCTAssertTrue(RadarRuntimePolicy.shouldStopForHeat(thermalLevel: 2))
+        XCTAssertTrue(RadarRuntimePolicy.shouldStopForHeat(thermalLevel: 3))
+    }
     func testIdleScreenDoesNotRequireContinuousPreciseOCR() {
         XCTAssertFalse(RadarRuntimePolicy.needsAccurateRead(offer: false, payment: false, finance: false, secondsSinceFallback: 1))
         XCTAssertTrue(RadarRuntimePolicy.needsAccurateRead(offer: false, payment: false, finance: false, secondsSinceFallback: 3))

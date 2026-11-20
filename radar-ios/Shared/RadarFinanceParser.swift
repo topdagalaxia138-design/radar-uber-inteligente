@@ -105,7 +105,7 @@ enum RadarFinanceParser {
             values[.rentalRetained] = money(after: ["valor retido para aluguel", "aluguel retido"], in: lines)
         }
         if isWallet {
-            values[.walletBalance] = money(after: ["saldo atual", "saldo disponivel", "saldo"], in: lines)
+            values[.walletBalance] = money(after: ["saldo atual", "saldo disponivel", "saldo pendente de", "saldo"], in: lines)
             let headerAmounts = lines.filter { $0.hasPrefix("saldo •") || $0.hasPrefix("saldo ·") }
                 .compactMap { line -> Double? in
                     guard let separator = line.firstIndex(where: { $0 == "•" || $0 == "·" }) else { return nil }
