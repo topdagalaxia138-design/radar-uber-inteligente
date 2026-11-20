@@ -136,6 +136,21 @@ struct RadarDetailsView: View {
                         Text(reading.activity(at: clock)).font(.subheadline.bold())
                         Text("Quadros recebidos para análise: \(reading.frames)").font(.caption)
                         Text(reading.readStatus).font(.caption)
+                        if let runtime = reading.runtime {
+                            Text("Estado térmico do iPhone: " + runtime.thermal).font(.subheadline.bold())
+                            Text("Estado informado pelo iOS; não é uma medição em graus.").font(.caption2)
+                            Text("OCR rápido: \(runtime.fastReads) • preciso: \(runtime.accurateReads) • quadros iguais poupados: \(runtime.skippedFrames)")
+                                .font(.caption)
+                            DisclosureGroup("Diagnóstico recente dos avisos") {
+                                ForEach(Array(runtime.events.suffix(12).reversed().enumerated()), id: \.offset) { _, event in
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(event.date.formatted(date: .omitted, time: .standard) + " • " + event.stage)
+                                            .font(.caption.bold())
+                                        Text(event.message).font(.caption)
+                                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
+                                }
+                            }
+                        }
                         if let financeStatus = reading.financeReadStatus {
                             Text(financeStatus).font(.caption)
                         }

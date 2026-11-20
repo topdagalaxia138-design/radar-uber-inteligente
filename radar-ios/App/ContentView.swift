@@ -182,6 +182,10 @@ struct ContentView: View {
             Text(active ? "Mantenha a oferta visível na Uber. O aviso chega pelo iPhone."
                  : "Use o botão ao lado para iniciar a transmissão Radar Leitura.")
                 .font(.subheadline).foregroundStyle(.secondary)
+            if let thermal = reading?.runtime?.thermal, thermal != "Normal" {
+                Label(thermal, systemImage: "thermometer.medium")
+                    .font(.caption.bold()).foregroundStyle(RadarPalette.gold)
+            }
             HStack {
                 Label("UBER", systemImage: "car.fill").font(.caption.bold())
                     .padding(.horizontal, 12).padding(.vertical, 7)

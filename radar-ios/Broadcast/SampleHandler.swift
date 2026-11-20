@@ -7,6 +7,15 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var gate = RadarOfferGate()
     private var history = RadarAdaptiveHistory()
     private var lastFrameAt = -Double.infinity
+    private var lastFingerprint: UInt64?
+    private var lastFallbackAt = -Double.infinity
+    private var heartbeatAt = -Double.infinity
+    private var skippedFrames = 0
+    private var fastReads = 0
+    private var accurateReads = 0
+    private var stoppedForHeat = false
+    private var retriedOffers: Set<String> = []
+    private let processingLock = NSLock()
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
         guard RadarEnvironment.sharedContainerAvailable else {
@@ -17,6 +26,12 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
         gate = RadarOfferGate()
         lastFrameAt = -Double.infinity
+        lastFingerprint = nil
+        lastFallbackAt = -Double.infinity
+        heartbeatAt = -Double.infinity
+        skippedFrames = 0; fastReads = 0; accurateReads = 0
+        stoppedForHeat = false
+        retriedOffers = []
         let defaults = RadarEnvironment.sharedDefaults
         if let data = defaults?.data(forKey: "observedRateHistory"),
            let saved = try? JSONDecoder().decode(RadarAdaptiveHistory.self, from: data) {
@@ -45,16 +60,89 @@ final class SampleHandler: RPBroadcastSampleHandler {
     }
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
-        guard sampleBufferType == .video,
-              ProcessInfo.processInfo.systemUptime - lastFrameAt >= 0.35,
+        guard sampleBufferType == .video, processingLock.try() else { return }
+        defer { processingLock.unlock() }
+        let now = ProcessInfo.processInfo.systemUptime
+        let thermal = ProcessInfo.processInfo.thermalState
+        let level = thermal.rawValue
+        let thermalLabel = level == 0 ? "Normal" : level == 1 ? "Elevado — modo econômico"
+            : level == 2 ? "Sério — leitura reduzida" : "Crítico — leitura interrompida"
+        if level >= 3 {
+            guard !stoppedForHeat else { return }
+            stoppedForHeat = true
+            RadarEnvironment.readingStore?.update {
+                $0.phase = "failed"
+                $0.readStatus = "Leitura interrompida por estado térmico crítico; aguarde o iPhone esfriar"
+                $0.runtimeEvent("thermal_stop", thermalLabel)
+                $0.runtime?.thermal = thermalLabel
+            }
+            finishBroadcastWithError(NSError(domain: "RadarThermal", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "O iPhone informou estado térmico crítico. Aguarde esfriar antes de reiniciar Radar Leitura."
+            ]))
+            return
+        }
+        guard now - lastFrameAt >= RadarRuntimePolicy.frameInterval(thermalLevel: level),
               let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        lastFrameAt = ProcessInfo.processInfo.systemUptime
-        // Release Vision's temporary buffers at each frame, important in a
-        // memory-constrained broadcast extension.
+        let fingerprint = frameFingerprint(pixels)
+        if fingerprint != nil && fingerprint == lastFingerprint && now - lastFrameAt < 1.5 {
+            skippedFrames += 1
+            if now - heartbeatAt >= 1 {
+                heartbeatAt = now
+                RadarEnvironment.readingStore?.update {
+                    $0.lastFrameAt = Date()
+                    if $0.runtime == nil { $0.runtime = RadarRuntimeDiagnostics() }
+                    $0.runtime?.thermal = thermalLabel
+                    $0.runtime?.skippedFrames = skippedFrames
+                }
+            }
+            return
+        }
+        lastFrameAt = now
+        lastFingerprint = fingerprint
         autoreleasepool { process(pixels) }
     }
 
+    // Sample a small grid in memory. No screenshot or fingerprint is persisted.
+    private func frameFingerprint(_ pixels: CVPixelBuffer) -> UInt64? {
+        guard CVPixelBufferLockBaseAddress(pixels, .readOnly) == kCVReturnSuccess else { return nil }
+        defer { CVPixelBufferUnlockBaseAddress(pixels, .readOnly) }
+        let planar = CVPixelBufferIsPlanar(pixels)
+        let format = CVPixelBufferGetPixelFormatType(pixels)
+        let stride: Int
+        let width: Int
+        let height: Int
+        let bytes: UnsafeMutableRawPointer?
+        let channels: Int
+        if planar {
+            guard format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+                || format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange else { return nil }
+            stride = CVPixelBufferGetBytesPerRowOfPlane(pixels, 0)
+            width = CVPixelBufferGetWidthOfPlane(pixels, 0)
+            height = CVPixelBufferGetHeightOfPlane(pixels, 0)
+            bytes = CVPixelBufferGetBaseAddressOfPlane(pixels, 0)
+            channels = 1
+        } else {
+            guard format == kCVPixelFormatType_32BGRA else { return nil }
+            stride = CVPixelBufferGetBytesPerRow(pixels)
+            width = CVPixelBufferGetWidth(pixels); height = CVPixelBufferGetHeight(pixels)
+            bytes = CVPixelBufferGetBaseAddress(pixels)
+            channels = 4
+        }
+        guard width > 0, height > 0, let data = bytes?.assumingMemoryBound(to: UInt8.self) else { return nil }
+        var hash: UInt64 = 1469598103934665603
+        for row in 0..<32 {
+            let y = min(height - 1, height / 5 + row * (height * 4 / 5) / 32)
+            for column in 0..<24 {
+                let x = min(width - 1, column * width / 24)
+                let value = data[y * stride + x * channels + (channels == 4 ? 1 : 0)] >> 4
+                hash = (hash ^ UInt64(value)) &* 1099511628211
+            }
+        }
+        return hash
+    }
+
     private func text(in pixels: CVPixelBuffer, level: VNRequestTextRecognitionLevel, region: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1)) throws -> String {
+        if level == .fast { fastReads += 1 } else { accurateReads += 1 }
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = level
         request.regionOfInterest = region
@@ -80,6 +168,10 @@ final class SampleHandler: RPBroadcastSampleHandler {
             $0.lastFrameAt = now
             $0.processingStartedAt = now
             $0.frames += 1
+            if $0.runtime == nil { $0.runtime = RadarRuntimeDiagnostics() }
+            let level = ProcessInfo.processInfo.thermalState.rawValue
+            $0.runtime?.thermal = level == 0 ? "Normal" : level == 1 ? "Elevado — modo econômico" : "Sério — leitura reduzida"
+            $0.runtime?.skippedFrames = skippedFrames
         }
         defer {
             let elapsed = ProcessInfo.processInfo.systemUptime - started
@@ -87,10 +179,23 @@ final class SampleHandler: RPBroadcastSampleHandler {
             RadarEnvironment.readingStore?.update {
                 $0.lastProcessedAt = Date()
                 $0.processingSeconds = elapsed
+                $0.runtime?.fastReads = fastReads
+                $0.runtime?.accurateReads = accurateReads
             }
         }
         do {
-            let initial = try text(in: pixels, level: .accurate)
+            let fast = try text(in: pixels, level: .fast)
+            let hasOffer = RadarOfferParser.mightContainOffer(fast)
+            let hasPayment = RadarPaymentParser.parse(fast) != nil
+            let hasFinance = RadarFinanceParser.mightContainFinancialScreen(fast)
+            guard RadarRuntimePolicy.needsAccurateRead(offer: hasOffer, payment: hasPayment, finance: hasFinance,
+                secondsSinceFallback: ProcessInfo.processInfo.systemUptime - lastFallbackAt) else { return }
+            lastFallbackAt = ProcessInfo.processInfo.systemUptime
+            // On an offer, leave the top banner outside the first accurate pass.
+            // The second cropped pass must still agree on every measurement.
+            let initial = try text(in: pixels, level: .accurate,
+                region: hasOffer ? CGRect(x: 0, y: 0, width: 1, height: 0.82)
+                                 : CGRect(x: 0, y: 0, width: 1, height: 1))
             if let firstPayment = RadarPaymentParser.parse(initial) {
                 let verification = try text(in: pixels, level: .accurate)
                 if firstPayment == RadarPaymentParser.parse(verification),
@@ -135,6 +240,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
                     $0.attemptStatus = outcome.reason
                     $0.fullReadSummary = outcome.fullSummary
                     $0.cardReadSummary = outcome.cardSummary
+                    $0.runtimeEvent(outcome.offer == nil ? "read_incomplete" : "offer_confirmed", outcome.reason)
                 }
             }
             guard let offer = outcome.offer else {
@@ -144,11 +250,13 @@ final class SampleHandler: RPBroadcastSampleHandler {
             let elapsed = ProcessInfo.processInfo.systemUptime - started
             guard elapsed < 2.5 else {
                 status("Leitura demorou mais de 2,5 segundos; aviso descartado para evitar atraso", forOfferAttempt: true)
+                RadarEnvironment.readingStore?.update { $0.runtimeEvent("late_read", "Aviso não enviado: leitura acima de 2,5 segundos") }
                 return
             }
             evaluate(offer)
         } catch {
             status("Falha do OCR; tentando novamente no próximo quadro")
+            RadarEnvironment.readingStore?.update { $0.runtimeEvent("ocr_error", (error as NSError).domain + " / " + String((error as NSError).code)) }
         }
     }
 
@@ -173,10 +281,19 @@ final class SampleHandler: RPBroadcastSampleHandler {
             }
             return
         }
+        if let previous = RadarEnvironment.readingStore?.load()?.decisionRecord,
+           previous.offerKey == offer.measurementKey, previous.noticeState == .failed,
+           RadarRuntimePolicy.canRetryFailedNotice(age: now.timeIntervalSince(previous.firstConfirmedAt),
+               secondsSinceFailure: now.timeIntervalSince(previous.lastAttemptAt ?? previous.firstConfirmedAt),
+               alreadyRetried: retriedOffers.contains(offer.measurementKey)) {
+            retriedOffers.insert(offer.measurementKey)
+            gate.allowRetry(offer)
+            RadarEnvironment.readingStore?.update { $0.runtimeEvent("retry", "Uma nova tentativa após falha de envio") }
+        }
         guard gate.shouldDeliver(offer, now: now) else {
             RadarEnvironment.readingStore?.update {
                 if $0.decisionRecord?.offerKey == offer.measurementKey {
-                    $0.decisionRecord?.lastSeenAt = now
+                    if $0.decisionRecord?.noticeState != .failed { $0.decisionRecord?.lastSeenAt = now }
                 }
             }
             return
@@ -194,7 +311,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
             accepted: notice.accepted, firstConfirmedAt: now, lastSeenAt: now)
         defaults?.set(summary, forKey: "lastOfferSummary")
         defaults?.set(now.timeIntervalSince1970, forKey: "lastOfferAt")
-        RadarEnvironment.readingStore?.update { $0.beginDecision(record) }
+        RadarEnvironment.readingStore?.update { $0.beginDecision(record); $0.runtimeEvent("decision", notice.title) }
         status(notice.accepted ? "Oferta confirmada; aprovada após combustível"
                               : "Oferta confirmada; reprovada após combustível", forOfferAttempt: true)
         deliver(notice, recordID: record.id, offerLabel: offerLabel)
@@ -209,10 +326,33 @@ final class SampleHandler: RPBroadcastSampleHandler {
         content.body = offerLabel + "\n" + notice.body
         content.threadIdentifier = "radar-offers"
         content.userInfo = ["radarDecisionID": recordID]
-        let request = UNNotificationRequest(identifier: "radar-latest-offer", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request) { error in
-            RadarEnvironment.readingStore?.update {
-                $0.markNotice(recordID: recordID, error: error?.localizedDescription, at: Date())
+        // A distinct request per decision avoids replacing an earlier banner in place.
+        let request = UNNotificationRequest(identifier: "radar-offer-" + recordID, content: content, trigger: nil)
+        let submittedAt = Date()
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized, settings.alertSetting == .enabled else {
+                RadarEnvironment.readingStore?.update {
+                    $0.markNotice(recordID: recordID, error: "Avisos bloqueados ou silenciosos nos ajustes do iPhone", at: Date())
+                    $0.runtimeEvent("permission_blocked", "Autorização ou alertas não permitem banner")
+                }
+                return
+            }
+            guard Date().timeIntervalSince(submittedAt) < 2.5,
+                  RadarEnvironment.readingStore?.load()?.phase == "running" else {
+                RadarEnvironment.readingStore?.update {
+                    $0.markNotice(recordID: recordID, error: "Envio atrasado ou transmissão encerrada", at: Date())
+                    $0.runtimeEvent("late_send", "Aviso descartado após espera ou encerramento")
+                }
+                return
+            }
+            center.add(request) { error in
+                RadarEnvironment.readingStore?.update {
+                    $0.markNotice(recordID: recordID, error: error?.localizedDescription, at: Date())
+                    $0.runtimeEvent(error == nil ? "ios_submitted" : "send_failed",
+                        error == nil ? "Solicitação aceita pelo iOS; banner não confirmado"
+                                     : (error! as NSError).domain + " / " + String((error! as NSError).code))
+                }
             }
         }
     }

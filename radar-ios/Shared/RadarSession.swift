@@ -2,6 +2,9 @@ import Foundation
 
 struct RadarOfferGate {
     private var lastSeen: [String: Date] = [:]
+    mutating func allowRetry(_ offer: RadarOffer) {
+        lastSeen.removeValue(forKey: offer.identityKey)
+    }
     mutating func shouldDeliver(_ offer: RadarOffer, now: Date) -> Bool {
         lastSeen = lastSeen.filter { now.timeIntervalSince($0.value) < 45 }
         let key = offer.identityKey

@@ -16,6 +16,7 @@ struct RadarDecisionRecord: Codable, Identifiable {
     var noticeState: RadarNoticeState = .awaiting
     var noticeMessage: String?
     var scheduledAt: Date?
+    var lastAttemptAt: Date?
 
     func isRecent(at date: Date) -> Bool {
         date >= firstConfirmedAt && date.timeIntervalSince(firstConfirmedAt) < 7
@@ -40,6 +41,7 @@ extension RadarReadingSnapshot {
         record.noticeState = error == nil ? .scheduled : .failed
         record.noticeMessage = error ?? "Enviado ao iOS; apresentação na tela não confirmada"
         record.scheduledAt = error == nil ? date : nil
+        record.lastAttemptAt = date
         decisionRecord = record
         notificationStatus = record.noticeMessage ?? ""
     }
