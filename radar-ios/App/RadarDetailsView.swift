@@ -196,7 +196,6 @@ struct RadarDetailsView: View {
             .padding()
             }
             .navigationTitle("Configurações e diagnóstico")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Fechar") { dismiss() } } }
             .navigationBarTitleDisplayMode(.inline)
             .task(id: scenePhase) {
                 guard scenePhase == .active else { return }

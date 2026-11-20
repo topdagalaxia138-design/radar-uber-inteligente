@@ -121,9 +121,9 @@ struct RadarWeeklyPlanView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color(red: 0.025, green: 0.045, blue: 0.075))
-        .preferredColorScheme(.dark)
-        .tint(Color(red: 0.30, green: 0.94, blue: 0.66))
+        .background(Color(red: 0.95, green: 0.96, blue: 0.97))
+        .preferredColorScheme(.light)
+        .tint(Color(red: 0.03, green: 0.47, blue: 0.30))
         .toolbar(.visible, for: .navigationBar)
         .navigationTitle("Minha semana")
         .navigationBarTitleDisplayMode(.inline)
