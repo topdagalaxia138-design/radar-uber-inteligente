@@ -33,6 +33,7 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var panel: RadarPanel?
     @State private var finance = RadarFinanceState()
+    @State private var payments = RadarPaymentState()
     @State private var reading: RadarReadingSnapshot?
     @State private var clock = Date()
 
@@ -73,6 +74,7 @@ struct ContentView: View {
             while !Task.isCancelled {
                 clock = Date()
                 finance = RadarEnvironment.financeStore?.load() ?? RadarFinanceState()
+                payments = RadarEnvironment.paymentStore?.load() ?? RadarPaymentState()
                 reading = RadarEnvironment.readingStore?.load()
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
@@ -194,8 +196,8 @@ struct ContentView: View {
 
     private var financeGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            moneyTile(.cash, title: "Dinheiro", icon: "banknote.fill", metric: .cashReceived, empty: "Não confirmado")
-            moneyTile(.digital, title: "Pela Uber", icon: "creditcard.fill", metric: .digitalEarnings, empty: "Ainda não lido")
+            moneyTile(.cash, title: "Dinheiro hoje", icon: "banknote.fill", metric: .cashReceived, empty: "Não confirmado")
+            moneyTile(.digital, title: "Pela Uber hoje", icon: "creditcard.fill", metric: .digitalEarnings, empty: "Ainda não lido")
             moneyTile(.earnings, title: "Resultado semanal", icon: "chart.bar.fill", metric: .weeklyEarnings, empty: "Ainda não lido")
             Button { panel = .fuel } label: {
                 VStack(alignment: .leading, spacing: 10) {
@@ -212,14 +214,17 @@ struct ContentView: View {
     private func moneyTile(_ route: RadarPanel, title: String, icon: String,
                            metric: RadarFinanceMetric, empty: String) -> some View {
         let observation = finance.latest(metric, now: clock)
+        let paymentValue = route == .cash ? payments.receivedToday(.cash, now: clock) : digitalToday
+        let paymentCard = route == .cash || route == .digital
+        let amount = paymentCard ? paymentValue : observation?.value
         return Button { panel = route } label: {
             VStack(alignment: .leading, spacing: 10) {
                 tileHeader(title, icon: icon)
-                if let observation {
-                    Text(observation.value, format: .currency(code: "BRL"))
+                if let amount {
+                    Text(amount, format: .currency(code: "BRL"))
                         .font(.headline).monospacedDigit().minimumScaleFactor(0.7).lineLimit(1)
-                    Text(stale(observation) ? "Última leitura • desatualizado" : "Valor lido na tela")
-                        .font(.caption2).foregroundStyle(stale(observation) ? RadarPalette.gold : .secondary)
+                    Text(paymentCard ? "Confirmações capturadas • parcial" : (observation.map { stale($0) } == true ? "Última leitura • desatualizado" : "Valor lido na tela"))
+                        .font(.caption2).foregroundStyle(.secondary)
                 } else {
                     Text(empty).font(.subheadline.bold())
                     Text("Abra para entender").font(.caption2).foregroundStyle(.secondary)
@@ -370,7 +375,33 @@ struct ContentView: View {
                     } else { Text("Abra o resumo semanal da Uber com Radar Leitura ativo.") }
                     Text("Ofertas analisadas não contam como viagens concluídas. A contagem não comprova elegibilidade ao benefício da locadora.")
                 }
-            case .wallet, .cash, .digital, .earnings:
+            case .cash, .digital:
+                Section("Recebimentos confirmados hoje • parcial") {
+                    let total = route == .cash ? payments.receivedToday(.cash, now: clock) : digitalToday
+                    if let total {
+                        Text(total, format: .currency(code: "BRL")).font(.largeTitle.bold())
+                    } else {
+                        Text("Nenhum recebimento confirmado capturado. Isso não significa que você recebeu zero.")
+                    }
+                    Text(payments.message).font(.caption)
+                    Text("Somente sequências legíveis de cobrança, confirmação e encerramento. Etapas perdidas ou ambíguas ficam pendentes; o histórico anterior não é reconstruído.")
+                    Text(route == .cash ? "Dinheiro informado como recebido por você. Abastecimentos ainda não são descontados deste total."
+                         : "Pix da Uber e pagamento no app confirmados na tela. Este total não é o abatimento exato da carteira.")
+                }
+                Section("Etapas capturadas") {
+                    let items = payments.receipts.sorted { $0.startedAt > $1.startedAt }
+                    if items.isEmpty { Text("Aguardando uma sequência de pagamento.") }
+                    ForEach(items.prefix(20)) { item in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(item.status == .received ? "Recebimento confirmado" : item.status == .unpaid ? "Não pagamento identificado" : "Recebimento pendente")
+                                .font(.headline)
+                            Text(item.method == .cash ? "Dinheiro" : item.method == .uberPix ? "Pix da Uber" : item.method == .uberApp ? "Pagamento no app" : "Forma não confirmada")
+                            if let amount = item.amount { Text(amount, format: .currency(code: "BRL")) }
+                            Text(item.updatedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption)
+                        }
+                    }
+                }
+            case .wallet, .earnings:
                 let metric: RadarFinanceMetric = route == .wallet ? .walletBalance : route == .cash ? .cashReceived
                     : route == .digital ? .digitalEarnings : .weeklyEarnings
                 Section("Último valor observado") {
@@ -397,6 +428,12 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private var digitalToday: Double? {
+        let pix = payments.receivedToday(.uberPix, now: clock)
+        let app = payments.receivedToday(.uberApp, now: clock)
+        return pix == nil && app == nil ? nil : (pix ?? 0) + (app ?? 0)
     }
 
     private func stale(_ observation: RadarFinanceObservation) -> Bool {

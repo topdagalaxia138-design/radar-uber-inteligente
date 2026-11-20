@@ -18,6 +18,9 @@ enum RadarEnvironment {
     static let sharedContainerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupIdentifier)
     #endif
     static var sharedContainerAvailable: Bool { sharedContainerURL != nil }
+    static let paymentStore: RadarPaymentStore? = sharedContainerURL.map {
+        RadarPaymentStore(url: $0.appendingPathComponent("payment-receipts.json"))
+    }
     static let financeStore: RadarFinanceStore? = sharedContainerURL.map {
         RadarFinanceStore(url: $0.appendingPathComponent("finance-observations.json"))
     }

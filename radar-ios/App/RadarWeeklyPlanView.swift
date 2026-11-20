@@ -7,6 +7,7 @@ struct RadarWeeklyPlanView: View {
     @AppStorage("plannedHoursPerDay", store: RadarEnvironment.sharedDefaults) private var hours = 6.0
 
     @State private var finance = RadarFinanceState()
+    @State private var payments = RadarPaymentState()
     @State private var clock = Date()
     @State private var financeStatus = "Abra uma tela de ganhos ou saldo na Uber com Radar Leitura ativo."
 
@@ -44,6 +45,14 @@ struct RadarWeeklyPlanView: View {
                     Text("Distribui aluguel previsto, Passe previsto e meta pessoal pelas horas planejadas. Não prevê demanda, espera ou retorno e não altera o filtro das ofertas.")
                         .font(.caption)
                 }
+            }
+            Section("Recebimentos de hoje • captura parcial") {
+                valueRow("Dinheiro confirmado", payments.receivedToday(.cash, now: clock))
+                valueRow("Pix da Uber confirmado", payments.receivedToday(.uberPix, now: clock))
+                valueRow("Pagamento no app confirmado", payments.receivedToday(.uberApp, now: clock))
+                Text(payments.message).font(.caption)
+                Text("Não é o total oficial do dia. Etapas não capturadas, ambíguas ou sem confirmação não entram como recebidas. Não some estes valores ao total de ganhos novamente.")
+                    .font(.caption)
             }
             Section("Leitura financeira automática") {
                 Text(financeStatus).font(.footnote)
@@ -115,6 +124,7 @@ struct RadarWeeklyPlanView: View {
             while !Task.isCancelled {
                 clock = Date()
                 finance = RadarEnvironment.financeStore?.load() ?? RadarFinanceState()
+                payments = RadarEnvironment.paymentStore?.load() ?? RadarPaymentState()
                 financeStatus = RadarEnvironment.readingStore?.load()?.financeReadStatus
                     ?? "Abra uma tela de ganhos ou saldo na Uber com Radar Leitura ativo."
                 try? await Task.sleep(nanoseconds: 1_000_000_000)

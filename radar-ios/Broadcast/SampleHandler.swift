@@ -91,6 +91,20 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
         do {
             let initial = try text(in: pixels, level: .accurate)
+            if let firstPayment = RadarPaymentParser.parse(initial) {
+                let verification = try text(in: pixels, level: .accurate)
+                if firstPayment == RadarPaymentParser.parse(verification),
+                   ProcessInfo.processInfo.systemUptime - started < 2.5 {
+                    let saved = RadarEnvironment.paymentStore?.observe(firstPayment, at: now) == true
+                    let paymentStatus = saved ? RadarEnvironment.paymentStore?.load().message
+                                              : "Não foi possível salvar a etapa de pagamento"
+                    RadarEnvironment.readingStore?.update {
+                        $0.financeReadStatus = paymentStatus
+                        $0.readStatus = paymentStatus ?? "Pagamento em observação"
+                    }
+                }
+                return
+            }
             if RadarFinanceParser.mightContainFinancialScreen(initial) {
                 let firstText = initial
                 let secondText = try text(in: pixels, level: .accurate)

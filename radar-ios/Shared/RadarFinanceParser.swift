@@ -88,6 +88,18 @@ enum RadarFinanceParser {
                     values[.weeklyEarnings] = currency(lines[index + 1])
                 }
             }
+            // Overview is weekly; a selected day on the chart is not.
+            if values[.weeklyEarnings] == nil, lines.contains("mais informacoes"),
+               values[.weeklyTrips] != nil {
+                for (index, line) in lines.enumerated() where line.range(of: #"\d{1,2}\s+de\s+"#, options: .regularExpression) != nil
+                    && (line.contains("-") || line.contains("–")) {
+                    let next = Array(lines.dropFirst(index + 1).prefix(3))
+                    for candidate in next {
+                        if let value = currency(candidate) { values[.weeklyEarnings] = value; break }
+                    }
+                    if values[.weeklyEarnings] != nil { break }
+                }
+            }
             values[.cashReceived] = money(after: ["dinheiro recebido", "recebido em dinheiro"], in: lines)
             values[.digitalEarnings] = money(after: ["ganhos em pagamentos digitais", "ganhos digitais"], in: lines)
             values[.rentalRetained] = money(after: ["valor retido para aluguel", "aluguel retido"], in: lines)

@@ -39,6 +39,13 @@ final class RadarFinanceParserTests: XCTestCase {
         XCTAssertEqual(reading?.values[.weeklyEarnings], -300)
         XCTAssertNil(reading?.values[.cashReceived])
     }
+    func testOverviewWeeklyTotalWithWrappedDates() {
+        let text = "Ganhos\n16 de nov. - 23\nde nov.\n-R$ 300,00\n22 h 36 m online\n43 viagens\nMais informações\nCarteira\nUber Conta\nSaldo\n-R$ 400,00"
+        let item = RadarFinanceParser.parse(text, now: now)
+        XCTAssertEqual(item?.values[.weeklyEarnings], -300)
+        XCTAssertEqual(item?.values[.weeklyTrips], 43)
+        XCTAssertEqual(item?.values[.walletBalance], -400)
+    }
     func testPastWeekDoesNotBecomeCurrentIncome() {
         let text = "Uber\nGanhos\nSemana passada\nTotal de ganhos\nR$ 600,00\nViagens\n10"
         XCTAssertNil(RadarFinanceParser.parse(text, now: now))
