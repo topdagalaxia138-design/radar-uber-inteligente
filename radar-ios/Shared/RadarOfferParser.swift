@@ -154,6 +154,7 @@ struct RadarDecisionSettings {
 
 enum RadarDecision {
     case accept(reason: String, estimatedNet: Double, netPerHour: Double)
+    case caution(reason: String, estimatedNet: Double, netPerHour: Double)
     case reject(reason: String, estimatedNet: Double, netPerHour: Double)
     case insufficient(reason: String)
 }
@@ -195,6 +196,10 @@ enum RadarDecisionEngine {
             return .accept(reason: note, estimatedNet: net, netPerHour: netPerHour)
         }
 
-        return .reject(reason: "Valor por hora após combustível abaixo da meta configurada.", estimatedNet: net, netPerHour: netPerHour)
+        if netPerHour >= threshold * 0.9 {
+            return .caution(reason: "Até 10% abaixo da meta após combustível; avalie o destino. Não prevê outra corrida.", estimatedNet: net, netPerHour: netPerHour)
+        }
+        return .reject(reason: "Valor por hora após combustível abaixo da faixa de atenção.", estimatedNet: net, netPerHour: netPerHour)
     }
 }
+

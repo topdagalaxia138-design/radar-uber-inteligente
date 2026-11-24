@@ -76,7 +76,12 @@ enum RadarFinanceParser {
         let currentWeek = showsCurrentWeek(lines, now: now)
         var values: [RadarFinanceMetric: Double] = [:]
 
-        if earningsPage && currentWeek {
+        // A selected chart day keeps the weekly date header. Statistics alone
+        // cannot establish that the amount and trip count belong to the week.
+        let explicitWeeklyScope = lines.contains("esta semana") || lines.contains("semana atual")
+            || lines.contains("mais informacoes")
+        let selectedDayAmbiguity = lines.contains("estatisticas") && !explicitWeeklyScope
+        if earningsPage && currentWeek && !selectedDayAmbiguity {
             values[.weeklyEarnings] = money(after: ["ganhos liquidos", "total de ganhos", "ganhos totais", "ganhos"], in: lines)
             values[.weeklyTrips] = tripCount(in: lines)
             if values[.weeklyEarnings] == nil, lines.contains("estatisticas"),
@@ -227,3 +232,4 @@ enum RadarFinanceParser {
         return values.count == 1 ? values.first : nil
     }
 }
+

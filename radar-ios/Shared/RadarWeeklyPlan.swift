@@ -1,12 +1,31 @@
 import Foundation
 
+enum RadarVehicleOwnership: String, Codable, CaseIterable {
+    case rented, owned, financed
+    var label: String {
+        switch self {
+        case .rented: return "Alugado"
+        case .owned: return "Próprio quitado"
+        case .financed: return "Financiado"
+        }
+    }
+}
+
 struct RadarWeeklyPlan: Codable {
-    var rental = 835.0
+    var rental = 832.22
     var monthlyPersonalGoal = 1000.0
     var workDays = 7
     var hoursPerDay = 6.0
     // nil means unknown, not zero. This is a budget, never an observed charge.
     var passBudget: Double?
+    var ownership: RadarVehicleOwnership?
+    // Non-rental fixed costs supplied by the driver, not inferred from wallet debt.
+    var monthlyVehicleBudget: Double?
+    var weeklyVehicleBudget: Double? {
+        if ownership == nil || ownership == .rented { return rental }
+        guard let monthlyVehicleBudget, monthlyVehicleBudget.isFinite, monthlyVehicleBudget >= 0 else { return nil }
+        return monthlyVehicleBudget * 12 / 52
+    }
 
     var isValid: Bool {
         rental.isFinite && rental >= 0
@@ -14,6 +33,7 @@ struct RadarWeeklyPlan: Codable {
         && (1...7).contains(workDays)
         && hoursPerDay.isFinite && hoursPerDay > 0 && hoursPerDay <= 6
         && (passBudget == nil || (passBudget!.isFinite && passBudget! >= 0))
+        && (monthlyVehicleBudget == nil || (monthlyVehicleBudget!.isFinite && monthlyVehicleBudget! >= 0))
     }
     var weeklyPersonalGoal: Double? {
         isValid ? monthlyPersonalGoal * 12 / 52 : nil
@@ -25,8 +45,8 @@ struct RadarWeeklyPlan: Codable {
     // Unknown Pass cost must not silently become a zero-cost estimate.
     var plannedHourlyRequirement: Double? {
         guard isValid, let passBudget, let goal = weeklyPersonalGoal,
-              let hours = plannedHours else { return nil }
-        return (rental + passBudget + goal) / hours
+              let hours = plannedHours, let vehicle = weeklyVehicleBudget else { return nil }
+        return (vehicle + passBudget + goal) / hours
     }
 }
 
@@ -45,3 +65,4 @@ struct RadarWeeklyOverview {
         ledger?.weeklyTrips.reduce(0) { $0 + $1.fuel }
     }
 }
+

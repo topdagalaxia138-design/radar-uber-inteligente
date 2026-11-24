@@ -9,6 +9,8 @@ struct RadarPaymentEvidence: Equatable {
     var finished = false
     var unpaid = false
     var newTrip = false
+    var completionConfirmed = false
+    var cancelled = false
     var amount: Double?
     var method: RadarReceiptMethod?
 }
@@ -21,7 +23,7 @@ enum RadarPaymentParser {
                     .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pt_BR"))
             }.filter { !$0.isEmpty }
         // No payment inference from an offer, wallet, Radar screen or history.
-        guard !RadarOfferParser.mightContainOffer(text), !lines.contains(where: { $0.contains("radar") || $0 == "saldo" || $0 == "carteira"
+        guard !lines.contains(where: { $0.contains("radar") || $0 == "saldo" || $0 == "carteira"
             || $0.hasPrefix("saldo •") || $0 == "tenho interesse" || $0 == "aceitar" }) else { return nil }
         var result = RadarPaymentEvidence()
         result.collection = lines.contains { $0 == "recolher pagamento" || $0 == "receber pagamento" }
@@ -29,8 +31,10 @@ enum RadarPaymentParser {
         result.finished = lines.contains { $0 == "viagem concluida" || $0 == "procurando viagens" }
         result.unpaid = lines.contains { $0 == "passageiro nao pagou" || $0 == "nao recebi o pagamento"
             || $0 == "pagamento pendente" || $0 == "valor nao recebido" }
+        result.completionConfirmed = lines.contains { $0 == "viagem concluida" || $0 == "corrida concluida" }
+        result.cancelled = lines.contains { $0 == "viagem cancelada" || $0 == "corrida cancelada" }
         result.newTrip = lines.contains { $0 == "iniciar viagem" || $0 == "viagem em andamento" }
-        guard result.collection || result.collected || result.finished || result.unpaid || result.newTrip else { return nil }
+        guard result.collection || result.collected || result.finished || result.unpaid || result.newTrip || result.cancelled else { return nil }
         let cash = lines.contains { $0 == "dinheiro" || $0 == "forma de pagamento: dinheiro" || $0 == "pagamento em dinheiro" }
         let pix = lines.contains { $0 == "pix" || $0 == "forma de pagamento: pix" || $0 == "pix da uber" }
         let app = lines.contains { $0 == "pagamento pelo app" || $0 == "pagamento no app" }
@@ -65,6 +69,10 @@ struct RadarReceipt: Codable, Identifiable {
     var amount: Double?
     var status: RadarReceiptStatus = .pending
     var confirmationSeen = false
+    var completedAt: Date?
+    var tripStartedAt: Date?
+    var collectionStartedAt: Date?
+    var cancelledAt: Date?
 }
 
 struct RadarPaymentState: Codable {
@@ -75,21 +83,45 @@ struct RadarPaymentState: Codable {
 
     mutating func observe(_ evidence: RadarPaymentEvidence, at date: Date) {
         if evidence.newTrip {
-            if let last = receipts.last,
-               date.timeIntervalSince(last.updatedAt) >= 60 { nextTripSeen = true }
-            return
-        }
-        if evidence.collection {
-            if currentID == nil || nextTripSeen {
-                let receipt = RadarReceipt(id: UUID().uuidString, startedAt: date, updatedAt: date)
+            let current = receipts.first { $0.id == currentID }
+            // A new in-progress screen opens a lifecycle, never books offered money.
+            if current == nil || ((current?.completedAt != nil || current?.cancelledAt != nil)
+                && date.timeIntervalSince(current!.updatedAt) >= 60) {
+                var receipt = RadarReceipt(id: UUID().uuidString, startedAt: date, updatedAt: date)
+                receipt.tripStartedAt = date
                 receipts.append(receipt)
                 currentID = receipt.id
                 nextTripSeen = false
+                message = "Viagem em acompanhamento; recebimento ainda não confirmado"
             }
+            return
+        }
+        if evidence.collection, currentID == nil || nextTripSeen {
+            receipts.append(RadarReceipt(id: UUID().uuidString, startedAt: date, updatedAt: date))
+            currentID = receipts.last?.id
+            nextTripSeen = false
         }
         guard let index = receipts.firstIndex(where: { $0.id == currentID }),
-              receipts[index].status == .pending,
-              date.timeIntervalSince(receipts[index].startedAt) < 15 * 60 else { return }
+              date >= receipts[index].startedAt else { return }
+        if evidence.cancelled {
+            receipts[index].cancelledAt = date
+            receipts[index].updatedAt = date
+            message = "Cancelamento identificado; não contado como corrida concluída"
+            return
+        }
+        guard receipts[index].cancelledAt == nil else { return }
+        if evidence.completionConfirmed,
+           date.timeIntervalSince(receipts[index].startedAt) < 2 * 60 * 60,
+           receipts[index].completedAt == nil {
+            receipts[index].completedAt = date
+            receipts[index].updatedAt = date
+        }
+        if evidence.collection && receipts[index].collectionStartedAt == nil {
+            receipts[index].collectionStartedAt = date
+        }
+        let paymentStart = receipts[index].collectionStartedAt ?? receipts[index].startedAt
+        guard receipts[index].status == .pending,
+              date.timeIntervalSince(paymentStart) < (receipts[index].tripStartedAt == nil ? 15 * 60 : 2 * 60 * 60) else { return }
         // Preserve ambiguity as pending rather than inventing money received.
         if let amount = evidence.amount {
             if let old = receipts[index].amount, abs(old - amount) > 0.005 {
@@ -112,6 +144,7 @@ struct RadarPaymentState: Codable {
         // Collected may be an action button: require a later completion screen.
         if evidence.finished && !evidence.collection && !evidence.collected,
            receipts[index].confirmationSeen, receipts[index].amount != nil, receipts[index].method != nil {
+            if receipts[index].completedAt == nil { receipts[index].completedAt = date }
             receipts[index].status = .received
             receipts[index].updatedAt = date
             message = "Recebimento registrado após confirmação e encerramento"
@@ -154,3 +187,4 @@ final class RadarPaymentStore {
         return state
     }
 }
+

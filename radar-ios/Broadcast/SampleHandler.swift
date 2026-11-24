@@ -314,8 +314,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         defaults?.set(summary, forKey: "lastOfferSummary")
         defaults?.set(now.timeIntervalSince1970, forKey: "lastOfferAt")
         RadarEnvironment.readingStore?.update { $0.beginDecision(record); $0.runtimeEvent("decision", notice.title) }
-        status(notice.accepted ? "Oferta confirmada; aprovada após combustível"
-                              : "Oferta confirmada; reprovada após combustível", forOfferAttempt: true)
+        status(notice.title, forOfferAttempt: true)
         deliver(notice, recordID: record.id, offerLabel: offerLabel)
     }
 
@@ -359,3 +358,4 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
     }
 }
+

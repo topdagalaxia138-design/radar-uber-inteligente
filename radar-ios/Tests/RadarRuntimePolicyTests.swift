@@ -65,7 +65,8 @@ final class RadarRuntimePolicyTests: XCTestCase {
         XCTAssertEqual(offer.totalKilometers!, 15.7, accuracy: 0.001)
         let highFuel = RadarDecisionSettings(fuelCostPerKilometer: 4.2 / 9, targetNetPerHour: 40, preferredMinimumFare: 25)
         let lowerFuel = RadarDecisionSettings(fuelCostPerKilometer: 0.372, targetNetPerHour: 40, preferredMinimumFare: 25)
-        guard case .reject = RadarDecisionEngine.evaluate(offer, settings: highFuel) else { return XCTFail() }
+        guard case .caution = RadarDecisionEngine.evaluate(offer, settings: highFuel) else { return XCTFail() }
         guard case .accept = RadarDecisionEngine.evaluate(offer, settings: lowerFuel) else { return XCTFail() }
     }
 }
+

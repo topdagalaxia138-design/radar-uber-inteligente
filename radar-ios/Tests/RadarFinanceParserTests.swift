@@ -28,7 +28,7 @@ final class RadarFinanceParserTests: XCTestCase {
         XCTAssertNil(RadarFinanceParser.parse(text, now: now))
     }
     func testStatisticsPageTotalAndSplitCount() {
-        let text = "Uber Conta\n16 de nov. - 23 de nov.\n-R$ 300,00\nEstatísticas\nViagens\n26"
+        let text = "Uber Conta\nEsta semana\n16 de nov. - 23 de nov.\n-R$ 300,00\nEstatísticas\nViagens\n26"
         let reading = RadarFinanceParser.parse(text, now: now)
         XCTAssertEqual(reading?.values[.weeklyEarnings], -300)
         XCTAssertEqual(reading?.values[.weeklyTrips], 26)
@@ -177,3 +177,4 @@ final class RadarFinanceParserTests: XCTestCase {
         XCTAssertNil(state.movements)
     }
 }
+

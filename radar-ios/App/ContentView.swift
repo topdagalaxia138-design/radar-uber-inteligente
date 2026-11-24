@@ -40,6 +40,7 @@ struct ContentView: View {
     private var active: Bool { reading?.activity(at: clock) == "Recebendo imagens da tela" }
     private var cost: Double? { RadarFuelCost.perKilometer(pricePerLiter: price, kilometersPerLiter: consumption) }
     private var trips: RadarFinanceObservation? { finance.latest(.weeklyTrips, now: clock) }
+    private var tripProgress: RadarTripProgress { RadarTripProgress(finance: finance, payments: payments, now: clock) }
     private var wallet: RadarFinanceObservation? { finance.latest(.walletBalance, now: clock) }
     private var version: String { Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?" }
 
@@ -146,7 +147,7 @@ struct ContentView: View {
                 Divider().overlay(.white.opacity(0.3))
                 HStack {
                     Image(systemName: "flag.checkered")
-                    Text(trips.map { "\(Int($0.value)) de 80 viagens lidas" } ?? "Meta semanal: 80 viagens")
+                    Text(tripProgress.label)
                         .font(.subheadline.bold())
                     Spacer()
                     Text("Detalhes ›").font(.caption.bold())
@@ -254,7 +255,8 @@ struct ContentView: View {
             }
             HStack(spacing: 12) {
                 rateBlock("APROVAR", value: target > 0 ? String(format: "≥ R$ %.2f/min", target / 60) : "Definir meta", color: RadarPalette.green)
-                rateBlock("ABAIXO DA META", value: target > 0 ? String(format: "< R$ %.2f/min", target / 60) : "Sem avaliação", color: .red)
+                rateBlock("ATENÇÃO", value: target > 0 ? String(format: "≥ R$ %.2f/min", target * 0.9 / 60) : "Definir meta", color: RadarPalette.gold)
+                rateBlock("RETORNO BAIXO", value: target > 0 ? String(format: "< R$ %.2f/min", target * 0.9 / 60) : "Sem avaliação", color: .red)
             }
             Divider()
             HStack {
@@ -269,7 +271,7 @@ struct ContentView: View {
                 HStack {
                     Label("Objetivo de 80 viagens", systemImage: "flag.checkered")
                     Spacer()
-                    Text(trips.map { "\(Int($0.value))/80 ›" } ?? "Ver ›")
+                    Text(tripProgress.label + " ›")
                 }.font(.subheadline.bold())
             }
         }.padding(18).cardSurface()
@@ -310,6 +312,7 @@ struct ContentView: View {
                 }
                 Text(target > 0 ? String(format: "Equivale a R$ %.2f/min após combustível.", target / 60)
                      : "Defina uma meta positiva para liberar avaliação.")
+                Text("Verde: atinge a meta. Amarelo: até 10% abaixo. Vermelho: abaixo dessa faixa ou combustível maior que a oferta.")
                 Text("Não há piso de R$ 25. Corridas curtas e longas usam a mesma meta.")
             }
             Section("Combustível usado na análise") {
@@ -371,12 +374,13 @@ struct ContentView: View {
                 }
             case .goal:
                 Section("Viagens lidas nesta semana") {
-                    if let trips {
-                        Text("\(Int(trips.value)) de 80")
-                        ProgressView(value: min(max(trips.value, 0), 80), total: 80)
-                        Text("Faltam \(max(0, 80 - Int(trips.value)))")
-                        observationDate(trips)
-                    } else { Text("Abra o resumo semanal da Uber com Radar Leitura ativo.") }
+                    Text(tripProgress.label)
+                    if let total = tripProgress.total {
+                        ProgressView(value: Double(min(max(total, 0), 80)), total: 80)
+                        Text("Faltam \(tripProgress.remaining ?? 80)")
+                    }
+                    if let trips { observationDate(trips) }
+                    Text("Conclusões após a última leitura complementam o número da Uber provisoriamente. Sem uma base oficial, mostramos somente a captura parcial; uma nova leitura oficial substitui a estimativa anterior.").font(.caption)
                     Text("Ofertas analisadas não contam como viagens concluídas. A contagem não comprova elegibilidade ao benefício da locadora.")
                 }
             case .cash, .digital:
@@ -461,3 +465,4 @@ private struct RadarCardSurface: ViewModifier {
 private extension View {
     func cardSurface() -> some View { modifier(RadarCardSurface()) }
 }
+

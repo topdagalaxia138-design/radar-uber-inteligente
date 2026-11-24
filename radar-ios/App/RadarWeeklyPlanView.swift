@@ -1,11 +1,13 @@
 import SwiftUI
 
 struct RadarWeeklyPlanView: View {
-    @AppStorage("weeklyRentalPlan", store: RadarEnvironment.sharedDefaults) private var rental = 835.0
+    @AppStorage("weeklyRentalPlan", store: RadarEnvironment.sharedDefaults) private var rental = 832.22
     @AppStorage("monthlyPersonalGoal", store: RadarEnvironment.sharedDefaults) private var monthlyGoal = 1000.0
     @AppStorage("plannedWorkDays", store: RadarEnvironment.sharedDefaults) private var days = 7
     @AppStorage("plannedHoursPerDay", store: RadarEnvironment.sharedDefaults) private var hours = 6.0
 
+    @AppStorage("vehicleOwnership", store: RadarEnvironment.sharedDefaults) private var ownership = RadarVehicleOwnership.rented.rawValue
+    @AppStorage("monthlyVehicleBudget", store: RadarEnvironment.sharedDefaults) private var vehicleBudget = 0.0
     @State private var finance = RadarFinanceState()
     @State private var payments = RadarPaymentState()
     @State private var clock = Date()
@@ -13,17 +15,32 @@ struct RadarWeeklyPlanView: View {
 
     private var plan: RadarWeeklyPlan {
         RadarWeeklyPlan(rental: rental, monthlyPersonalGoal: monthlyGoal,
-                        workDays: days, hoursPerDay: hours, passBudget: nil)
+                        workDays: days, hoursPerDay: hours, passBudget: nil,
+                        ownership: RadarVehicleOwnership(rawValue: ownership), monthlyVehicleBudget: vehicleBudget)
     }
     var body: some View {
         Form {
             Section("Planejamento — configure uma vez") {
+                Picker("Seu veículo", selection: $ownership) {
+                    ForEach(RadarVehicleOwnership.allCases, id: \.rawValue) { item in
+                        Text(item.label).tag(item.rawValue)
+                    }
+                }
+                if ownership == RadarVehicleOwnership.rented.rawValue {
                 HStack {
                     Text("Aluguel previsto por semana")
                     Spacer()
-                    TextField("835", value: $rental, format: .number)
+                    TextField("Aluguel", value: $rental, format: .number)
                         .keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 100)
                 }
+                } else {
+                    LabeledContent("Custos fixos do carro por mês") {
+                        TextField("R$", value: $vehicleBudget, format: .number)
+                            .keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 100)
+                    }
+                    Text("Inclua os custos que você paga, como seguro e parcela. É planejamento, não uma cobrança nem lucro confirmado.").font(.caption)
+                }
+                if let vehicle = plan.weeklyVehicleBudget { valueRow("Custo fixo planejado por semana", vehicle) }
                 HStack {
                     Text("Meta pessoal por mês")
                     Spacer()
@@ -102,14 +119,10 @@ struct RadarWeeklyPlanView: View {
                     .font(.caption)
             }
             Section("Objetivo de 80 corridas") {
-                if let trips = finance.latest(.weeklyTrips, now: clock) {
-                    Text("Viagens exibidas nesta semana: \(Int(trips.value))")
-                    Text("Faltam \(max(0, 80 - Int(trips.value))) para a meta de 80")
-                    Text("Contagem lida na tela da Uber; benefício depende das regras e confirmação da Zarp.")
-                        .font(.caption)
-                } else {
-                    Text("Aguardando leitura da contagem desta semana na Uber")
-                }
+                let progress = RadarTripProgress(finance: finance, payments: payments, now: clock)
+                Text(progress.label)
+                if let remaining = progress.remaining { Text("Faltam \(remaining) para a meta de 80") }
+                Text("Acompanhamento provisório após a última leitura oficial. Benefício depende da locadora; captura parcial não comprova elegibilidade.").font(.caption)
                 Text("Ofertas analisadas não são usadas como viagens concluídas. A semana anterior não é somada à atual.")
                     .font(.caption)
             }
@@ -154,3 +167,4 @@ struct RadarWeeklyPlanView: View {
         }
     }
 }
+
