@@ -15,6 +15,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var fastReads = 0
     private var accurateReads = 0
     private var stoppedForHeat = false
+    private var pausedForHeat = false
+    private var thermalHeartbeatAt = -Double.infinity
     private var retriedOffers: Set<String> = []
     private let processingLock = NSLock()
 
@@ -33,6 +35,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
         lastFallbackAt = -Double.infinity
         heartbeatAt = -Double.infinity
         skippedFrames = 0; fastReads = 0; accurateReads = 0
+        pausedForHeat = false
+        thermalHeartbeatAt = -Double.infinity
         stoppedForHeat = false
         retriedOffers = []
         let defaults = RadarEnvironment.sharedDefaults
@@ -73,21 +77,47 @@ final class SampleHandler: RPBroadcastSampleHandler {
         let thermal = ProcessInfo.processInfo.thermalState
         let level = thermal.rawValue
         let thermalLabel = level == 0 ? "Normal" : level == 1 ? "Elevado — modo econômico"
-            : level == 2 ? "Sério — leitura reduzida" : "Crítico — leitura interrompida"
+            : level == 2 ? "Sério — OCR pausado" : "Crítico — leitura interrompida"
         if RadarRuntimePolicy.shouldStopForHeat(thermalLevel: level) {
             guard !stoppedForHeat else { return }
             stoppedForHeat = true
             RadarEnvironment.journeyStore?.update { $0.finish(at: Date(), interrupted: true) }
             RadarEnvironment.readingStore?.update {
                 $0.phase = "failed"
-                $0.readStatus = "Leitura interrompida por estado térmico sério ou crítico; aguarde o iPhone esfriar"
+                $0.readStatus = "Leitura interrompida por estado térmico crítico; aguarde o iPhone esfriar"
                 $0.runtimeEvent("thermal_stop", thermalLabel)
                 $0.runtime?.thermal = thermalLabel
             }
             finishBroadcastWithError(NSError(domain: "RadarThermal", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "O iPhone informou estado térmico sério ou crítico. Aguarde esfriar antes de reiniciar Radar Leitura."
+                NSLocalizedDescriptionKey: "O iPhone informou estado térmico crítico. Aguarde esfriar antes de reiniciar Radar Leitura."
             ]))
             return
+        }
+        if level == 2 {
+            if !pausedForHeat {
+                pausedForHeat = true
+                RadarEnvironment.journeyStore?.update { $0.finish(at: Date(), interrupted: true) }
+            }
+            if now - thermalHeartbeatAt >= 1 {
+                thermalHeartbeatAt = now
+                RadarEnvironment.readingStore?.update {
+                    $0.phase = "thermalPaused"
+                    $0.lastFrameAt = Date()
+                    $0.readStatus = "OCR pausado: iOS informou estado sério (2); transmissão mantida. Retoma quando o estado baixar."
+                    if $0.runtime == nil { $0.runtime = RadarRuntimeDiagnostics() }
+                    $0.runtime?.thermal = thermalLabel
+                }
+            }
+            return // No fingerprint or OCR while serious; do not terminate the broadcast.
+        }
+        if pausedForHeat {
+            pausedForHeat = false
+            RadarEnvironment.journeyStore?.update { $0.start(at: Date()) }
+            journeyHeartbeatAt = -Double.infinity
+            RadarEnvironment.readingStore?.update {
+                $0.phase = "running"
+                $0.runtimeEvent("thermal_resumed", "iOS reduziu o estado térmico; OCR retomado")
+            }
         }
         if now - journeyHeartbeatAt >= 10 {
             journeyHeartbeatAt = now

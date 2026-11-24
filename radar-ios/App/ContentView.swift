@@ -177,7 +177,7 @@ struct ContentView: View {
                                 in: RoundedRectangle(cornerRadius: 15))
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Radar de ofertas").font(.headline)
-                    Text(active ? "Avaliando a tela do iPhone" : "Monitoramento parado")
+                    Text(active ? "Avaliando a tela do iPhone" : reading?.phase == "thermalPaused" ? "OCR pausado; transmissão ativa" : "Monitoramento parado")
                         .font(.caption).foregroundStyle(active ? RadarPalette.green : RadarPalette.gold)
                 }
                 Spacer(minLength: 8)

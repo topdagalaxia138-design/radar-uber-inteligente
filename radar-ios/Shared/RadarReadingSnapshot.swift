@@ -25,6 +25,7 @@ struct RadarReadingSnapshot: Codable {
     var cardReadSummary: String?
 
     func activity(at now: Date) -> String {
+        if phase == "thermalPaused" { return "OCR pausado pelo estado térmico; transmissão continua" }
         if phase == "failed" { return "Leitura interrompida com erro" }
         if phase == "paused" { return "Transmissão pausada" }
         if phase != "running" { return "Transmissão encerrada ou ainda não iniciada" }

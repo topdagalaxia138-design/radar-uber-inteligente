@@ -9,7 +9,7 @@ enum RadarRuntimePolicy {
         default: return 0.6
         }
     }
-    static func shouldStopForHeat(thermalLevel: Int) -> Bool { thermalLevel >= 2 }
+    static func shouldStopForHeat(thermalLevel: Int) -> Bool { thermalLevel >= 3 }
 
     static func needsAccurateRead(offer: Bool, payment: Bool, finance: Bool,
                                   secondsSinceFallback: Double) -> Bool {
