@@ -45,7 +45,7 @@ enum RadarOfferParser {
         let action = text.localizedCaseInsensitiveContains("Aceitar")
             || text.localizedCaseInsensitiveContains("Tenho interesse")
         let productLine = lines.contains {
-            $0.range(of: #"^\s*(Uber\s*X|Priority)(?:\s+Exclusivo)?\s*$"#,
+            $0.range(of: #"^\s*(Uber\s*X|(?:Uber\s+)?Comfort|Priority)(?:\s+Exclusivo)?\s*$"#,
                      options: [.regularExpression, .caseInsensitive]) != nil
         }
         return action || ((rows >= 2 || productLine) && text.contains("R$"))
@@ -104,7 +104,7 @@ enum RadarOfferParser {
 
         // Observed UberX/Priority card: pickup row then trip row, without textual labels.
         // Require the product, offer action and exactly two complete metric rows.
-        guard lines.contains(where: { ($0.range(of: #"\bUber\s*X\b"#, options: [.regularExpression, .caseInsensitive]) != nil || $0.localizedCaseInsensitiveContains("Priority")) }),
+        guard lines.contains(where: { ($0.range(of: #"\b(?:Uber\s*X|(?:Uber\s+)?Comfort)\b"#, options: [.regularExpression, .caseInsensitive]) != nil || $0.localizedCaseInsensitiveContains("Priority")) }),
               lines.contains(where: { $0.localizedCaseInsensitiveContains("Tenho interesse")
                   || $0.localizedCaseInsensitiveContains("Aceitar") }) else {
             return .incomplete("Tela não identificada como cartão de oferta compatível.")
