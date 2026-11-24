@@ -70,6 +70,7 @@ struct ContentView: View {
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             // Initial values confirmed for this installation; existing saved settings win.
+            RadarLocationTracker.shared.start()
             if price <= 0 { price = 4.20 }
             if consumption <= 0 { consumption = 9 }
             while !Task.isCancelled {
@@ -112,6 +113,11 @@ struct ContentView: View {
                     Button("Ver semana →") { selectedTab = 1 }.font(.subheadline.bold())
                 }
                 financeGrid
+                NavigationLink { RadarOperationsView() } label: {
+                    Label("Jornada, combustível e conciliação →", systemImage: "chart.line.uptrend.xyaxis")
+                        .font(.subheadline.bold()).frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(18).cardSurface()
+                }
                 criteriaCard
                 Text("Valores lidos na Uber. Não há conexão direta com sua conta.")
                     .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4)
@@ -465,4 +471,5 @@ private struct RadarCardSurface: ViewModifier {
 private extension View {
     func cardSurface() -> some View { modifier(RadarCardSurface()) }
 }
+
 

@@ -12,8 +12,16 @@ struct RadarFinanceObservation: Codable, Identifiable {
 struct RadarFinanceState: Codable {
     var observations: [RadarFinanceObservation] = []
     var movements: [RadarWalletMovement]? = nil
+    var walletCheckpoints: [RadarWalletCheckpoint]? = nil
 
     mutating func observe(_ reading: RadarFinanceReading, at date: Date) {
+        if let balance = reading.values[.walletBalance], balance.isFinite {
+            var points = walletCheckpoints ?? []
+            if points.last?.balance != balance {
+                points.append(.init(observedAt: date, balance: balance))
+                walletCheckpoints = Array(points.suffix(256))
+            }
+        }
         for (metric, value) in reading.values {
             guard !metric.isWeekly || reading.weekKey != nil else { continue }
             let observation = RadarFinanceObservation(metric: metric, value: value, screen: reading.screen,
@@ -76,3 +84,4 @@ final class RadarFinanceStore {
         return state
     }
 }
+

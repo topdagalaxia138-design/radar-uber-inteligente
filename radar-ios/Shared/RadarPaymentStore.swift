@@ -28,13 +28,13 @@ enum RadarPaymentParser {
         var result = RadarPaymentEvidence()
         result.collection = lines.contains { $0 == "recolher pagamento" || $0 == "receber pagamento" }
         result.collected = lines.contains { $0 == "pagamento recolhido" || $0 == "pagamento recebido" || $0 == "pagamento confirmado" }
-        result.finished = lines.contains { $0 == "viagem concluida" || $0 == "procurando viagens" }
+        result.finished = lines.contains { $0 == "viagem concluida" || $0 == "corrida concluida" || $0 == "procurando viagens" }
         result.unpaid = lines.contains { $0 == "passageiro nao pagou" || $0 == "nao recebi o pagamento"
             || $0 == "pagamento pendente" || $0 == "valor nao recebido" }
         result.completionConfirmed = lines.contains { $0 == "viagem concluida" || $0 == "corrida concluida" }
         result.cancelled = lines.contains { $0 == "viagem cancelada" || $0 == "corrida cancelada" }
         result.newTrip = lines.contains { $0 == "iniciar viagem" || $0 == "viagem em andamento" }
-        guard result.collection || result.collected || result.finished || result.unpaid || result.newTrip || result.cancelled else { return nil }
+        guard result.collection || result.collected || result.finished || result.completionConfirmed || result.unpaid || result.newTrip || result.cancelled else { return nil }
         let cash = lines.contains { $0 == "dinheiro" || $0 == "forma de pagamento: dinheiro" || $0 == "pagamento em dinheiro" }
         let pix = lines.contains { $0 == "pix" || $0 == "forma de pagamento: pix" || $0 == "pix da uber" }
         let app = lines.contains { $0 == "pagamento pelo app" || $0 == "pagamento no app" }
@@ -132,6 +132,12 @@ struct RadarPaymentState: Codable {
             receipts[index].amount = amount
         }
         if let method = evidence.method {
+            if let old = receipts[index].method, old != method {
+                receipts[index].method = nil
+                receipts[index].confirmationSeen = false
+                message = "Forma de pagamento mudou; aguardando nova confirmação"
+                return
+            }
             receipts[index].method = method
         }
         if evidence.unpaid {
@@ -187,4 +193,5 @@ final class RadarPaymentStore {
         return state
     }
 }
+
 

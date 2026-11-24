@@ -10,6 +10,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var lastFingerprint: UInt64?
     private var lastFallbackAt = -Double.infinity
     private var heartbeatAt = -Double.infinity
+    private var journeyHeartbeatAt = -Double.infinity
     private var skippedFrames = 0
     private var fastReads = 0
     private var accurateReads = 0
@@ -24,6 +25,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
             ]))
             return
         }
+        RadarEnvironment.journeyStore?.update { $0.start(at: Date()) }
+        journeyHeartbeatAt = -Double.infinity
         gate = RadarOfferGate()
         lastFrameAt = -Double.infinity
         lastFingerprint = nil
@@ -47,14 +50,18 @@ final class SampleHandler: RPBroadcastSampleHandler {
         defaults?.set(true, forKey: "broadcastActive")
     }
     override func broadcastPaused() {
+        RadarEnvironment.journeyStore?.update { $0.finish(at: Date(), interrupted: true) }
         RadarEnvironment.sharedDefaults?.set(false, forKey: "broadcastActive")
         RadarEnvironment.readingStore?.update { $0.phase = "paused" }
     }
     override func broadcastResumed() {
+        RadarEnvironment.journeyStore?.update { $0.start(at: Date()) }
+        journeyHeartbeatAt = -Double.infinity
         RadarEnvironment.sharedDefaults?.set(true, forKey: "broadcastActive")
         RadarEnvironment.readingStore?.update { $0.phase = "running" }
     }
     override func broadcastFinished() {
+        RadarEnvironment.journeyStore?.update { $0.finish(at: Date(), interrupted: stoppedForHeat) }
         RadarEnvironment.sharedDefaults?.set(false, forKey: "broadcastActive")
         RadarEnvironment.readingStore?.update { if !stoppedForHeat { $0.phase = "stopped" } }
     }
@@ -70,6 +77,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         if RadarRuntimePolicy.shouldStopForHeat(thermalLevel: level) {
             guard !stoppedForHeat else { return }
             stoppedForHeat = true
+            RadarEnvironment.journeyStore?.update { $0.finish(at: Date(), interrupted: true) }
             RadarEnvironment.readingStore?.update {
                 $0.phase = "failed"
                 $0.readStatus = "Leitura interrompida por estado térmico sério ou crítico; aguarde o iPhone esfriar"
@@ -80,6 +88,10 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 NSLocalizedDescriptionKey: "O iPhone informou estado térmico sério ou crítico. Aguarde esfriar antes de reiniciar Radar Leitura."
             ]))
             return
+        }
+        if now - journeyHeartbeatAt >= 10 {
+            journeyHeartbeatAt = now
+            RadarEnvironment.journeyStore?.update { $0.heartbeat(at: Date()) }
         }
         guard now - lastFrameAt >= RadarRuntimePolicy.frameInterval(thermalLevel: level),
               let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
@@ -358,4 +370,5 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
     }
 }
+
 

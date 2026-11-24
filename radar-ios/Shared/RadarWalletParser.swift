@@ -54,6 +54,7 @@ enum RadarWalletParser {
 
     private static func isStart(_ line: String) -> Bool {
         line == "uberx" || line.hasPrefix("uberx ")
+        || line == "comfort" || line.hasPrefix("comfort ") || line == "uber comfort" || line.hasPrefix("uber comfort ")
         || line == "priority" || line.hasPrefix("priority ")
         || line == "wait & save" || line.hasPrefix("wait & save ")
         || line.hasPrefix("taxa relativa a veiculos")
@@ -110,10 +111,11 @@ enum RadarWalletParser {
             product = nil
         } else if joined.contains("passe para motoristas") && joined.contains("ajuste de ganhos") {
             kind = .passAdjustment; product = nil
-        } else if let first = block.first, first.hasPrefix("uberx") || first.hasPrefix("priority") || first.hasPrefix("wait & save") {
+        } else if let first = block.first, first.hasPrefix("uberx") || first.hasPrefix("priority") || first.hasPrefix("wait & save") || first.hasPrefix("comfort") || first.hasPrefix("uber comfort") {
             kind = joined.contains("viagem com pagamento em dinheiro") ? .cashTripBalance : .tripBalance
-            product = first.hasPrefix("uberx") ? "UberX" : first.hasPrefix("priority") ? "Priority" : "Wait & Save"
+            product = first.hasPrefix("uberx") ? "UberX" : first.hasPrefix("priority") ? "Priority" : first.contains("comfort") ? "Comfort" : "Wait & Save"
         } else { return nil }
         return RadarWalletMovement(occurredAt: date, amount: amount, kind: kind, product: product)
     }
 }
+

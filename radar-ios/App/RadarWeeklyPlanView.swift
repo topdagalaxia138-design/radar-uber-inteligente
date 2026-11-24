@@ -20,6 +20,9 @@ struct RadarWeeklyPlanView: View {
     }
     var body: some View {
         Form {
+            Section {
+                NavigationLink("Jornada, combustível, histórico e conciliação") { RadarOperationsView() }
+            }
             Section("Planejamento — configure uma vez") {
                 Picker("Seu veículo", selection: $ownership) {
                     ForEach(RadarVehicleOwnership.allCases, id: \.rawValue) { item in
@@ -167,4 +170,5 @@ struct RadarWeeklyPlanView: View {
         }
     }
 }
+
 

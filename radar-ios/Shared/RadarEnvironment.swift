@@ -18,6 +18,12 @@ enum RadarEnvironment {
     static let sharedContainerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupIdentifier)
     #endif
     static var sharedContainerAvailable: Bool { sharedContainerURL != nil }
+    static let journeyStore: RadarJourneyStore? = sharedContainerURL.map {
+        RadarJourneyStore(url: $0.appendingPathComponent("journeys.json"))
+    }
+    static let distanceStore: RadarDistanceStore? = sharedContainerURL.map {
+        RadarDistanceStore(url: $0.appendingPathComponent("distance-totals.json"))
+    }
     static let paymentStore: RadarPaymentStore? = sharedContainerURL.map {
         RadarPaymentStore(url: $0.appendingPathComponent("payment-receipts.json"))
     }
@@ -32,3 +38,4 @@ enum RadarEnvironment {
         return UserDefaults(suiteName: groupIdentifier)
     }()
 }
+
