@@ -18,7 +18,7 @@ struct RadarTripSettlement {
     }
     var source: String {
         if receipt.driverEarnings != nil { return "Ganhos da viagem exibidos" }
-        return movement == nil ? "Ganhos da viagem ainda não conferidos" : "Calculado com lançamento individual da carteira"
+        return movement == nil ? "Ganhos da viagem ainda não conferidos" : "Associação por horário com a carteira • estimativa a conferir"
     }
 }
 

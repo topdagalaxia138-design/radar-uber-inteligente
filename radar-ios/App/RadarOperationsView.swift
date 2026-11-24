@@ -65,7 +65,7 @@ struct RadarOperationsView: View {
             LabeledContent("Recebimentos por confirmar", value: String(report.pending))
             money("Dinheiro confirmado • parcial", closeout.cash)
             money("Pela Uber confirmado • parcial", closeout.digital)
-            money("Ganhos individuais conferidos", closeout.earnings)
+            money("Ganhos individuais • lidos ou estimados", closeout.earnings)
             if let distance = report.distance {
                 LabeledContent("Quilômetros GPS", value: String(format: "%.2f km", distance.kilometers))
                 LabeledContent("Consumo estimado", value: String(format: "%.2f litros", distance.fuelLiters))
@@ -75,7 +75,7 @@ struct RadarOperationsView: View {
             money("Ganhos menos combustível estimado", closeout.marginAfterFuel)
             money("Aluguel, Passe e ajustes capturados no turno", closeout.capturedExpense)
             money("Resultado após despesas capturadas • parcial", closeout.resultAfterCapturedExpenses)
-            Text("Recebimento é diferente de ganho: o valor recolhido pode incluir a parte da Uber. O resultado usa ganhos individuais exibidos ou um lançamento de viagem associado sem ambiguidade. Despesas semanais fora deste turno não estão rateadas aqui; o resultado não é lucro líquido. Abastecimento não é descontado novamente como consumo.").font(.caption)
+            Text("Recebimento é diferente de ganho: o valor recolhido pode incluir a parte da Uber. O resultado usa ganhos individuais exibidos ou um lançamento associado por horário. A associação por horário é uma estimativa, não uma identidade confirmada da viagem. Despesas semanais fora deste turno não estão rateadas aqui; o resultado não é lucro líquido. Abastecimento não é descontado novamente como consumo.").font(.caption)
             if report.journey.interrupted || (report.journey.endedAt == nil && now.timeIntervalSince(report.journey.lastHeartbeat) > 30) {
                 Text("Jornada interrompida ou sem sinal recente; histórico não presume acompanhamento contínuo.").foregroundStyle(.orange)
             }

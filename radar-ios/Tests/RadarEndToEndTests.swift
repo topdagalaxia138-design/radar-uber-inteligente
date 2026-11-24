@@ -94,6 +94,21 @@ final class RadarEndToEndTests: XCTestCase {
         run(["Pagamento recolhido\nDinheiro\nR$ 12,00", "Viagem concluída"], state: &empty)
         XCTAssertTrue(empty.receipts.isEmpty)
     }
+    func testExpiredTripRecoversAtNextStartWithoutCreatingPastIncome() {
+        var state = RadarPaymentState()
+        state.observe(event("Iniciar UberX"), at: now)
+        state.observe(event("Iniciar Comfort"), at: now.addingTimeInterval(4 * 3600 + 1))
+        XCTAssertEqual(state.receipts.count, 2)
+        XCTAssertNil(state.receipts[0].completedAt)
+        XCTAssertNotNil(state.receipts[0].missingEvidence)
+        XCTAssertEqual(state.receipts[1].phase, .accepted)
+    }
+    func testLateCancellationCannotRewriteAnAlreadyCompletedTrip() {
+        var state = RadarPaymentState()
+        run(["Iniciar UberX", "Concluir UberX", "Viagem concluída", "Viagem cancelada"], state: &state)
+        XCTAssertNotNil(state.receipts[0].completedAt)
+        XCTAssertNil(state.receipts[0].cancelledAt)
+    }
     func testOldReceiptAndOldStateStillDecode() throws {
         let old = #"{"receipts":[{"id":"old","startedAt":0,"updatedAt":0,"status":"pending","confirmationSeen":false}],"currentID":"old","nextTripSeen":false,"message":"old"}"#
         let state = try JSONDecoder().decode(RadarPaymentState.self, from: Data(old.utf8))

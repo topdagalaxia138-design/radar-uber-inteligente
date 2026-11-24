@@ -155,7 +155,8 @@ struct RadarPaymentState: Codable {
         let terminal = current.map { receipts[$0].completedAt != nil || receipts[$0].cancelledAt != nil } ?? false
         let nextAccepted = evidence.accepted && lastEvidenceStage != "accepted"
             && current.map { receipts[$0].phase == .inProgress || receipts[$0].phase == .collecting } == true
-        let boundary = evidence.newTrip && (current == nil || terminal || nextAccepted)
+        let expired = current.map { date.timeIntervalSince(receipts[$0].startedAt) >= 4 * 3600 } ?? false
+        let boundary = evidence.newTrip && (current == nil || terminal || nextAccepted || expired)
             && !(lastEvidenceStage == stage && terminal)
         if boundary || (evidence.collection && current == nil) {
             if let i = current, !terminal { receipts[i].missingEvidence = "Fim da viagem anterior não observado; valores continuam pendentes" }
@@ -177,6 +178,7 @@ struct RadarPaymentState: Codable {
         }
         if receipts[index].status == .received { return }
         if evidence.cancelled {
+            guard receipts[index].completedAt == nil else { return }
             receipts[index].cancelledAt = date; receipts[index].phase = .cancelled
             receipts[index].updatedAt = date
             message = "Cancelamento observado; não contado como corrida concluída"
