@@ -36,15 +36,18 @@ workflows:
           codesign --force --sign - --entitlements radar-ios/App/RadarUber.entitlements --generate-entitlement-der build/sideload/Payload/RadarUber.app
           codesign --verify --deep --strict build/sideload/Payload/RadarUber.app
           cd build/sideload
-          ditto -c -k --keepParent Payload RadarUber-resign.ipa
-          shasum -a 256 RadarUber-resign.ipa > RadarUber-resign.ipa.sha256
+          RADAR_BUILD_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Payload/RadarUber.app/Info.plist)
+          ditto -c -k --keepParent Payload "RadarUber-v${RADAR_BUILD_VERSION}-resign.ipa"
+          shasum -a 256 "RadarUber-v${RADAR_BUILD_VERSION}-resign.ipa" > "RadarUber-v${RADAR_BUILD_VERSION}-resign.ipa.sha256"
       - name: Validar IPA e registrar versao
         script: |
           set -euo pipefail
           cd "$CM_BUILD_DIR"
-          python3 radar-ios/scripts/verify_ipa.py build/sideload/RadarUber-resign.ipa
+          python3 radar-ios/scripts/verify_ipa.py build/sideload/RadarUber-v*-resign.ipa
+          git rev-parse HEAD > build/sideload/source-commit.txt
           /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' build/sideload/Payload/RadarUber.app/Info.plist > build/sideload/version.txt
     artifacts:
-      - build/sideload/RadarUber-resign.ipa
-      - build/sideload/RadarUber-resign.ipa.sha256
+      - build/sideload/RadarUber-v*-resign.ipa
+      - build/sideload/RadarUber-v*-resign.ipa.sha256
       - build/sideload/version.txt
+      - build/sideload/source-commit.txt
