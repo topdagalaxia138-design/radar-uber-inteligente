@@ -81,7 +81,7 @@ struct RadarWeeklyPlanView: View {
                 ForEach(RadarFinanceMetric.allCases, id: \.rawValue) { metric in
                     VStack(alignment: .leading, spacing: 3) {
                         let observation = finance.latest(metric, now: clock)
-                        if metric == .weeklyTrips {
+                        if metric == .weeklyTrips || metric == .visibleTrips {
                             HStack {
                                 Text(metric.label)
                                 Spacer()
@@ -170,5 +170,6 @@ struct RadarWeeklyPlanView: View {
         }
     }
 }
+
 
 

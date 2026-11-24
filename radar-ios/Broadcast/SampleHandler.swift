@@ -175,7 +175,12 @@ final class SampleHandler: RPBroadcastSampleHandler {
         request.recognitionLanguages = ["pt-BR", "en-US"]
         request.usesLanguageCorrection = false
         try VNImageRequestHandler(cvPixelBuffer: pixels).perform([request])
-        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+        return RadarScreenText.render((request.results ?? []).compactMap { observation in
+            guard let text = observation.topCandidates(1).first?.string else { return nil }
+            let box = observation.boundingBox
+            return RadarTextRegion(text: text, x: Double(box.minX), y: Double(box.minY),
+                width: Double(box.width), height: Double(box.height))
+        })
     }
 
     private func status(_ message: String, forOfferAttempt: Bool = false) {
@@ -213,7 +218,9 @@ final class SampleHandler: RPBroadcastSampleHandler {
             let fast = try text(in: pixels, level: .fast)
             let readTime = ProcessInfo.processInfo.systemUptime
             if fast == lastConfirmedFastText && readTime - lastConfirmedReadAt < 4 { return }
-            let hasOffer = RadarOfferParser.mightContainOffer(fast)
+            // Payment/trip screens can contain a product and a price too.
+            // An offer candidate must not crop away lifecycle evidence.
+            let hasOffer = RadarOfferParser.mightContainOffer(fast) && RadarPaymentParser.parse(fast) == nil
             let hasPayment = RadarPaymentParser.parse(fast) != nil
             let hasFinance = RadarFinanceParser.mightContainFinancialScreen(fast)
             guard RadarRuntimePolicy.needsAccurateRead(offer: hasOffer, payment: hasPayment, finance: hasFinance,
@@ -236,6 +243,11 @@ final class SampleHandler: RPBroadcastSampleHandler {
                     RadarEnvironment.readingStore?.update {
                         $0.financeReadStatus = paymentStatus
                         $0.readStatus = paymentStatus ?? "Pagamento em observação"
+                    }
+                }
+                else {
+                    RadarEnvironment.readingStore?.update {
+                        $0.financeReadStatus = "Etapa de viagem/pagamento sem confirmação nas duas leituras; registro pendente"
                     }
                 }
                 return
@@ -284,6 +296,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 RadarEnvironment.readingStore?.update { $0.runtimeEvent("late_read", "Aviso não enviado: leitura acima de 2,5 segundos") }
                 return
             }
+            RadarEnvironment.paymentStore?.observeOffer(offer, at: now)
             evaluate(offer)
             lastConfirmedFastText = fast; lastConfirmedReadAt = readTime
         } catch {
@@ -388,5 +401,6 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
     }
 }
+
 
 

@@ -1,10 +1,11 @@
 import Foundation
 
 enum RadarFinanceMetric: String, Codable, CaseIterable {
-    case weeklyEarnings, weeklyTrips, walletBalance, rentalPending, rentalRetained, cashReceived, digitalEarnings, passPrice
+    case visibleTrips, weeklyEarnings, weeklyTrips, walletBalance, rentalPending, rentalRetained, cashReceived, digitalEarnings, passPrice
 
     var label: String {
         switch self {
+        case .visibleTrips: return "Viagens lidas — período a confirmar"
         case .weeklyEarnings: return "Ganhos da semana exibidos"
         case .weeklyTrips: return "Viagens da semana exibidas"
         case .walletBalance: return "Saldo da Uber exibido"
@@ -16,7 +17,7 @@ enum RadarFinanceMetric: String, Codable, CaseIterable {
         }
     }
     var isWeekly: Bool {
-        [.weeklyEarnings, .weeklyTrips, .rentalRetained, .cashReceived, .digitalEarnings].contains(self)
+        [.visibleTrips, .weeklyEarnings, .weeklyTrips, .rentalRetained, .cashReceived, .digitalEarnings].contains(self)
     }
 }
 
@@ -84,6 +85,9 @@ enum RadarFinanceParser {
         let explicitWeeklyScope = lines.contains("esta semana") || lines.contains("semana atual")
             || lines.contains("mais informacoes")
         let selectedDayAmbiguity = lines.contains("estatisticas") && !explicitWeeklyScope
+        if earningsPage && currentWeek && selectedDayAmbiguity {
+            values[.visibleTrips] = tripCount(in: lines)
+        }
         if earningsPage && currentWeek && !selectedDayAmbiguity {
             values[.weeklyEarnings] = money(after: ["ganhos liquidos", "total de ganhos", "ganhos totais", "ganhos"], in: lines)
             values[.weeklyTrips] = tripCount(in: lines)
@@ -235,4 +239,5 @@ enum RadarFinanceParser {
         return values.count == 1 ? values.first : nil
     }
 }
+
 

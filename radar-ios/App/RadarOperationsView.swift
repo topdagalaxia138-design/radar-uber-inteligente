@@ -18,6 +18,7 @@ struct RadarOperationsView: View {
         Form {
             trackingSection
             if let latest = reports.first { currentSection(latest) }
+            tripSection
             walletSection
             costsSection
             planningSection
@@ -55,23 +56,53 @@ struct RadarOperationsView: View {
         }
     }
     private func currentSection(_ report: RadarJourneyReport) -> some View {
-        Section(report.journey.endedAt == nil ? "Última jornada iniciada" : "Última jornada encerrada") {
+        let closeout = RadarShiftCloseout(report: report, payments: payments, finance: finance)
+        return Section(report.journey.endedAt == nil ? "Última jornada iniciada" : "Última jornada encerrada") {
+            Text(closeout.status).font(.headline)
             Text(report.journey.startedAt.formatted(date: .abbreviated, time: .shortened))
             LabeledContent("Tempo acompanhado", value: String(format: "%.0f min", report.journey.trackedSeconds / 60))
             LabeledContent("Conclusões capturadas", value: String(report.completed.count))
             LabeledContent("Recebimentos por confirmar", value: String(report.pending))
-            money("Recebimentos confirmados • parcial", report.confirmed.isEmpty ? nil : report.received)
+            money("Dinheiro confirmado • parcial", closeout.cash)
+            money("Pela Uber confirmado • parcial", closeout.digital)
+            money("Ganhos individuais conferidos", closeout.earnings)
             if let distance = report.distance {
                 LabeledContent("Quilômetros GPS", value: String(format: "%.2f km", distance.kilometers))
                 LabeledContent("Consumo estimado", value: String(format: "%.2f litros", distance.fuelLiters))
                 money("Combustível estimado", report.fuelCost)
                 if !report.gpsComplete { Text("GPS parcial: faltam trechos ou cobertura nas extremidades da jornada.").foregroundStyle(.orange) }
             } else { Text("Sem distância acompanhada: consumo do turno ainda desconhecido.") }
-            money("Recebimentos menos combustível • parcial", report.confirmed.isEmpty ? nil : report.afterFuel)
-            Text("Ainda não é lucro: aluguel, Passe, taxas e demais despesas são conferidos separadamente.").font(.caption)
+            money("Ganhos menos combustível estimado", closeout.marginAfterFuel)
+            money("Aluguel, Passe e ajustes capturados no turno", closeout.capturedExpense)
+            money("Resultado após despesas capturadas • parcial", closeout.resultAfterCapturedExpenses)
+            Text("Recebimento é diferente de ganho: o valor recolhido pode incluir a parte da Uber. O resultado usa ganhos individuais exibidos ou um lançamento de viagem associado sem ambiguidade. Despesas semanais fora deste turno não estão rateadas aqui; o resultado não é lucro líquido. Abastecimento não é descontado novamente como consumo.").font(.caption)
             if report.journey.interrupted || (report.journey.endedAt == nil && now.timeIntervalSince(report.journey.lastHeartbeat) > 30) {
                 Text("Jornada interrompida ou sem sinal recente; histórico não presume acompanhamento contínuo.").foregroundStyle(.orange)
             }
+        }
+    }
+    private var tripSection: some View {
+        let entries = RadarTripReconciler.settlements(payments: payments, finance: finance)
+        return Section("Corridas e recebimentos") {
+            if payments.receipts.isEmpty { Text("Nenhuma etapa de corrida acompanhada ainda.") }
+            ForEach(payments.receipts.suffix(20).reversed()) { receipt in
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(receipt.phase?.label ?? "Etapa anterior à atualização").font(.headline)
+                    Text(receipt.startedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption)
+                    if let offer = receipt.offer {
+                        Text(String(format: "Oferta de referência: R$ %.2f • %.0f min • %.1f km", offer.fare, offer.minutes, offer.kilometers)).font(.caption)
+                    }
+                    Text(receipt.method == .cash ? "Dinheiro" : receipt.method == .uberPix ? "Pix Uber" : receipt.method == .uberApp ? "Pagamento no app" : "Forma ainda não confirmada").font(.caption)
+                    money(receipt.status == .received ? "Recebido confirmado" : "Valor ainda não confirmado", receipt.amount)
+                    if let settlement = entries.first(where: { $0.receipt.id == receipt.id }) {
+                        money("Ganhos da viagem", settlement.driverEarnings)
+                        Text(settlement.source).font(.caption)
+                    }
+                    if let reason = receipt.missingEvidence { Text(reason).font(.caption).foregroundStyle(.orange) }
+                    if receipt.status == .unpaid { Text("Não pago: fora dos recebimentos").font(.caption).foregroundStyle(.orange) }
+                }
+            }
+            Text("Oferta não gera recebimento. As etapas e confirmações visíveis ficam vinculadas à mesma corrida; cancelamentos e não pagamentos são separados.").font(.caption)
         }
     }
     private var walletSection: some View {
@@ -104,7 +135,7 @@ struct RadarOperationsView: View {
         return Section("Planejamento pelo seu histórico") {
             if windows.isEmpty {
                 Text("Ainda faltam jornadas comparáveis com cobertura suficiente.")
-                Text("Cada faixa precisa de pelo menos três dias distintos, nas últimas oito semanas, com jornadas encerradas, GPS sem lacunas, duas conclusões ou mais e todos os recebimentos dessas conclusões confirmados.").font(.caption)
+                Text("Cada faixa precisa de pelo menos três dias distintos, nas últimas oito semanas, com jornadas encerradas, GPS sem lacunas, duas conclusões ou mais e todos os recebimentos e ganhos individuais dessas conclusões confirmados.").font(.caption)
             }
             ForEach(windows.prefix(5)) { window in
                 VStack(alignment: .leading) {
@@ -140,3 +171,4 @@ struct RadarOperationsView: View {
         }
     }
 }
+

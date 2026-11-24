@@ -8,12 +8,19 @@ struct RadarJourneyReport: Identifiable {
     var completed: [RadarReceipt] { receipts.filter { $0.completedAt != nil && $0.cancelledAt == nil } }
     var confirmed: [RadarReceipt] { completed.filter { $0.status == .received && $0.amount != nil } }
     var received: Double { confirmed.reduce(0) { $0 + ($1.amount ?? 0) } }
-    var pending: Int { completed.count - confirmed.count }
+    var pending: Int { receipts.filter { $0.cancelledAt == nil }.count - confirmed.count }
     var fuelCost: Double? {
         guard let distance, distance.unpricedKilometers == 0 else { return nil }
         return distance.fuelCost
     }
-    var afterFuel: Double? { fuelCost.map { received - $0 } }
+    var earnings: Double? {
+        guard !confirmed.isEmpty, pending == 0, confirmed.allSatisfy({ $0.driverEarnings != nil }) else { return nil }
+        return confirmed.reduce(0) { $0 + ($1.driverEarnings ?? 0) }
+    }
+    var afterFuel: Double? {
+        guard let earnings, let fuelCost else { return nil }
+        return earnings - fuelCost
+    }
     var gpsComplete: Bool {
         guard let distance, !distance.hasGap, let first = distance.firstAt, let last = distance.lastAt else { return false }
         return first.timeIntervalSince(journey.startedAt) <= 30
@@ -31,8 +38,8 @@ struct RadarJourneyReport: Identifiable {
         self.journey = journey
         let end = journey.endedAt ?? journey.lastHeartbeat
         receipts = payments.receipts.filter {
-            guard let completed = $0.completedAt else { return false }
-            return completed >= journey.startedAt && completed <= end
+            let eventAt = $0.completedAt ?? $0.startedAt
+            return eventAt >= journey.startedAt && eventAt < end
         }
         distance = distances.readings.first { $0.id == journey.id }
     }
@@ -75,3 +82,4 @@ enum RadarHistoryPlanner {
         }.sorted { $0.medianHourlyAfterFuel > $1.medianHourlyAfterFuel }
     }
 }
+

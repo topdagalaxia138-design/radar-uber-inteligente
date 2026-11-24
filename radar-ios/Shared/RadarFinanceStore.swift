@@ -43,7 +43,7 @@ struct RadarFinanceState: Codable {
     func latest(_ metric: RadarFinanceMetric, now: Date) -> RadarFinanceObservation? {
         let week = RadarFinanceParser.weekKey(at: now)
         return observations.filter {
-            $0.metric == metric && (!metric.isWeekly || $0.weekKey == week)
+            $0.metric == metric && $0.observedAt <= now && (!metric.isWeekly || $0.weekKey == week)
         }.max { $0.observedAt < $1.observedAt }
     }
 
@@ -84,4 +84,5 @@ final class RadarFinanceStore {
         return state
     }
 }
+
 

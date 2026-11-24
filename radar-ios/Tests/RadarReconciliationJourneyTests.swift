@@ -69,7 +69,7 @@ final class RadarReconciliationJourneyTests: XCTestCase {
         for n in 1...2 {
             var receipt = RadarReceipt(id: "\(id)-\(n)", startedAt: date, updatedAt: date)
             receipt.completedAt = date.addingTimeInterval(Double(n) * 100)
-            receipt.status = pending ? .pending : .received; receipt.method = .cash; receipt.amount = revenue / 2
+            receipt.status = pending ? .pending : .received; receipt.method = .cash; receipt.amount = revenue / 2; receipt.driverEarnings = revenue / 2
             payments.receipts.append(receipt)
         }
         var distance = RadarDistanceReading(id: id)
@@ -98,3 +98,4 @@ final class RadarReconciliationJourneyTests: XCTestCase {
         XCTAssertNil(payments.receivedToday(.cash, now: now))
     }
 }
+

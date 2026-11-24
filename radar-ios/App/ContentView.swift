@@ -112,6 +112,7 @@ struct ContentView: View {
                     Spacer()
                     Button("Ver semana →") { selectedTab = 1 }.font(.subheadline.bold())
                 }
+                tripTrackingCard
                 financeGrid
                 NavigationLink { RadarOperationsView() } label: {
                     Label("Jornada, combustível e conciliação →", systemImage: "chart.line.uptrend.xyaxis")
@@ -123,6 +124,22 @@ struct ContentView: View {
                     .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4)
             }.padding(20)
         }.background(RadarPalette.canvas.ignoresSafeArea())
+    }
+
+    @ViewBuilder private var tripTrackingCard: some View {
+        if let receipt = payments.receipts.first(where: { $0.id == payments.currentID }) {
+            NavigationLink { RadarOperationsView() } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("ACOMPANHAMENTO DA CORRIDA", systemImage: "car.side.fill")
+                        .font(.system(size: 10, weight: .bold)).foregroundStyle(RadarPalette.green)
+                    Text(receipt.phase?.label ?? "Etapa capturada").font(.headline)
+                    Text(receipt.status == .received ? "Recebimento confirmado e separado no painel" : receipt.missingEvidence ?? "Aguardando as próximas etapas na Uber")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Última etapa: " + receipt.updatedAt.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(18).cardSurface()
+            }.buttonStyle(.plain).foregroundStyle(RadarPalette.ink)
+        }
     }
 
     private var weekHero: some View {
@@ -407,6 +424,8 @@ struct ContentView: View {
                     if items.isEmpty { Text("Aguardando uma sequência de pagamento.") }
                     ForEach(items.prefix(20)) { item in
                         VStack(alignment: .leading, spacing: 5) {
+                            Text(item.phase?.label ?? "Etapa capturada").font(.caption.bold())
+                            if let reason = item.missingEvidence { Text(reason).font(.caption).foregroundStyle(.orange) }
                             Text(item.status == .received ? "Recebimento confirmado" : item.status == .unpaid ? "Não pagamento identificado" : "Recebimento pendente")
                                 .font(.headline)
                             Text(item.method == .cash ? "Dinheiro" : item.method == .uberPix ? "Pix da Uber" : item.method == .uberApp ? "Pagamento no app" : "Forma não confirmada")
@@ -471,5 +490,6 @@ private struct RadarCardSurface: ViewModifier {
 private extension View {
     func cardSurface() -> some View { modifier(RadarCardSurface()) }
 }
+
 
 
