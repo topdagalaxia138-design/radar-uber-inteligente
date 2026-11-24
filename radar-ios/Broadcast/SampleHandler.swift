@@ -9,14 +9,15 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var lastFrameAt = -Double.infinity
     private var lastFingerprint: UInt64?
     private var lastFallbackAt = -Double.infinity
+    private var lastConfirmedFastText: String?
+    private var lastConfirmedReadAt = -Double.infinity
     private var heartbeatAt = -Double.infinity
     private var journeyHeartbeatAt = -Double.infinity
     private var skippedFrames = 0
     private var fastReads = 0
     private var accurateReads = 0
+    private var lastThermalLevel: Int?
     private var stoppedForHeat = false
-    private var pausedForHeat = false
-    private var thermalHeartbeatAt = -Double.infinity
     private var retriedOffers: Set<String> = []
     private let processingLock = NSLock()
 
@@ -33,10 +34,11 @@ final class SampleHandler: RPBroadcastSampleHandler {
         lastFrameAt = -Double.infinity
         lastFingerprint = nil
         lastFallbackAt = -Double.infinity
+        lastConfirmedFastText = nil
+        lastConfirmedReadAt = -Double.infinity
         heartbeatAt = -Double.infinity
         skippedFrames = 0; fastReads = 0; accurateReads = 0
-        pausedForHeat = false
-        thermalHeartbeatAt = -Double.infinity
+        lastThermalLevel = nil
         stoppedForHeat = false
         retriedOffers = []
         let defaults = RadarEnvironment.sharedDefaults
@@ -77,7 +79,13 @@ final class SampleHandler: RPBroadcastSampleHandler {
         let thermal = ProcessInfo.processInfo.thermalState
         let level = thermal.rawValue
         let thermalLabel = level == 0 ? "Normal" : level == 1 ? "Elevado — modo econômico"
-            : level == 2 ? "Sério — OCR pausado" : "Crítico — leitura interrompida"
+            : level == 2 ? "Sério — leitura econômica" : "Crítico — leitura interrompida"
+        if lastThermalLevel != level {
+            lastThermalLevel = level
+            RadarEnvironment.readingStore?.update {
+                $0.runtimeEvent("thermal_state", "Estado informado pelo iOS: \(level). " + thermalLabel)
+            }
+        }
         if RadarRuntimePolicy.shouldStopForHeat(thermalLevel: level) {
             guard !stoppedForHeat else { return }
             stoppedForHeat = true
@@ -92,32 +100,6 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 NSLocalizedDescriptionKey: "O iPhone informou estado térmico crítico. Aguarde esfriar antes de reiniciar Radar Leitura."
             ]))
             return
-        }
-        if level == 2 {
-            if !pausedForHeat {
-                pausedForHeat = true
-                RadarEnvironment.journeyStore?.update { $0.finish(at: Date(), interrupted: true) }
-            }
-            if now - thermalHeartbeatAt >= 1 {
-                thermalHeartbeatAt = now
-                RadarEnvironment.readingStore?.update {
-                    $0.phase = "thermalPaused"
-                    $0.lastFrameAt = Date()
-                    $0.readStatus = "OCR pausado: iOS informou estado sério (2); transmissão mantida. Retoma quando o estado baixar."
-                    if $0.runtime == nil { $0.runtime = RadarRuntimeDiagnostics() }
-                    $0.runtime?.thermal = thermalLabel
-                }
-            }
-            return // No fingerprint or OCR while serious; do not terminate the broadcast.
-        }
-        if pausedForHeat {
-            pausedForHeat = false
-            RadarEnvironment.journeyStore?.update { $0.start(at: Date()) }
-            journeyHeartbeatAt = -Double.infinity
-            RadarEnvironment.readingStore?.update {
-                $0.phase = "running"
-                $0.runtimeEvent("thermal_resumed", "iOS reduziu o estado térmico; OCR retomado")
-            }
         }
         if now - journeyHeartbeatAt >= 10 {
             journeyHeartbeatAt = now
@@ -229,11 +211,14 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
         do {
             let fast = try text(in: pixels, level: .fast)
+            let readTime = ProcessInfo.processInfo.systemUptime
+            if fast == lastConfirmedFastText && readTime - lastConfirmedReadAt < 4 { return }
             let hasOffer = RadarOfferParser.mightContainOffer(fast)
             let hasPayment = RadarPaymentParser.parse(fast) != nil
             let hasFinance = RadarFinanceParser.mightContainFinancialScreen(fast)
             guard RadarRuntimePolicy.needsAccurateRead(offer: hasOffer, payment: hasPayment, finance: hasFinance,
-                secondsSinceFallback: ProcessInfo.processInfo.systemUptime - lastFallbackAt) else { return }
+                secondsSinceFallback: ProcessInfo.processInfo.systemUptime - lastFallbackAt,
+                thermalLevel: ProcessInfo.processInfo.thermalState.rawValue) else { return }
             lastFallbackAt = ProcessInfo.processInfo.systemUptime
             // On an offer, leave the top banner outside the first accurate pass.
             // The second cropped pass must still agree on every measurement.
@@ -245,6 +230,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 if firstPayment == RadarPaymentParser.parse(verification),
                    ProcessInfo.processInfo.systemUptime - started < 2.5 {
                     let saved = RadarEnvironment.paymentStore?.observe(firstPayment, at: now) == true
+                    if saved { lastConfirmedFastText = fast; lastConfirmedReadAt = readTime }
                     let paymentStatus = saved ? RadarEnvironment.paymentStore?.load().message
                                               : "Não foi possível salvar a etapa de pagamento"
                     RadarEnvironment.readingStore?.update {
@@ -263,6 +249,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 if let reading = RadarFinanceState.confirmedReading(first, second),
                    ProcessInfo.processInfo.systemUptime - started < 7 {
                     let saved = RadarEnvironment.financeStore?.observe(reading, at: Date()) == true
+                    if saved { lastConfirmedFastText = fast; lastConfirmedReadAt = readTime }
                     message = saved ? "Leitura financeira atualizada automaticamente: " + reading.screen
                                     : "Não foi possível salvar a leitura financeira"
                 } else {
@@ -298,6 +285,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 return
             }
             evaluate(offer)
+            lastConfirmedFastText = fast; lastConfirmedReadAt = readTime
         } catch {
             status("Falha do OCR; tentando novamente no próximo quadro")
             RadarEnvironment.readingStore?.update { $0.runtimeEvent("ocr_error", (error as NSError).domain + " / " + String((error as NSError).code)) }
