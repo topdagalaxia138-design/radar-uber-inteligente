@@ -66,7 +66,10 @@ enum RadarFinanceParser {
         let lines = normalizedLines(text)
         // ReplayKit supplies pixels, not the foreground app's identity.
         // Require a visible Uber marker before persisting financial values.
-        guard lines.contains(where: { $0.range(of: #"\buber(?:x| driver| pro)?\b"#, options: .regularExpression) != nil }) else { return nil }
+        let hasUberMarker = lines.contains(where: { $0.range(of: #"\buber(?:x| driver| pro)?\b"#, options: .regularExpression) != nil })
+        let comfortWallet = lines.contains(where: { $0.hasPrefix("saldo •") || $0.hasPrefix("saldo ·") })
+            && RadarWalletParser.parse(lines, now: now).contains(where: { $0.product == "Comfort" })
+        guard hasUberMarker || comfortWallet else { return nil }
         let isWallet = lines.contains("carteira")
             || lines.contains(where: { $0 == "saldo" || $0.hasPrefix("saldo •") || $0.hasPrefix("saldo ·") })
         let isRental = lines.contains("aluguel") || lines.contains("retencao de aluguel")
