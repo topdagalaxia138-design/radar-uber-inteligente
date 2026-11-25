@@ -233,9 +233,9 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 region: hasOffer ? CGRect(x: 0, y: 0, width: 1, height: 0.82)
                                  : CGRect(x: 0, y: 0, width: 1, height: 1))
             if let firstPayment = RadarPaymentParser.parse(initial) {
-                let verification = try text(in: pixels, level: .accurate)
-                if firstPayment == RadarPaymentParser.parse(verification),
-                   ProcessInfo.processInfo.systemUptime - started < 2.5 {
+                let verification = fast
+                let verifiedPayment = firstPayment == RadarPaymentParser.parse(verification) ? firstPayment : RadarPaymentParser.parse(try text(in: pixels, level: .accurate))
+                if firstPayment == verifiedPayment {
                     let saved = RadarEnvironment.paymentStore?.observe(firstPayment, at: now) == true
                     if saved { lastConfirmedFastText = fast; lastConfirmedReadAt = readTime }
                     let paymentStatus = saved ? RadarEnvironment.paymentStore?.load().message
@@ -291,9 +291,9 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 return
             }
             let elapsed = ProcessInfo.processInfo.systemUptime - started
-            guard elapsed < 2.5 else {
-                status("Leitura demorou mais de 2,5 segundos; aviso descartado para evitar atraso", forOfferAttempt: true)
-                RadarEnvironment.readingStore?.update { $0.runtimeEvent("late_read", "Aviso não enviado: leitura acima de 2,5 segundos") }
+            guard elapsed < 2.0 else {
+                status("Leitura demorou mais de 2 segundos; aviso descartado para evitar atraso", forOfferAttempt: true)
+                RadarEnvironment.readingStore?.update { $0.runtimeEvent("late_read", "Aviso não enviado: leitura acima de 2 segundos") }
                 return
             }
             RadarEnvironment.paymentStore?.observeOffer(offer, at: now)
@@ -358,7 +358,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         defaults?.set(now.timeIntervalSince1970, forKey: "lastOfferAt")
         RadarEnvironment.readingStore?.update { $0.beginDecision(record); $0.runtimeEvent("decision", notice.title) }
         status(notice.title, forOfferAttempt: true)
-        deliver(notice, recordID: record.id, offerLabel: offerLabel)
+        if notice.accepted { deliver(notice, recordID: record.id, offerLabel: offerLabel) }
     }
 
     private func deliver(_ notice: RadarDecisionNotice, recordID: String, offerLabel: String) {
