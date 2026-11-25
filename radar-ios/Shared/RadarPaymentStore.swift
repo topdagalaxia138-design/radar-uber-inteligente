@@ -31,6 +31,8 @@ enum RadarPaymentParser {
         // No payment inference from an offer, wallet, Radar screen or history.
         guard !lines.contains(where: { $0.contains("radar") || $0 == "saldo" || $0 == "carteira"
             || $0.hasPrefix("saldo •") || $0 == "tenho interesse" || $0 == "aceitar" }) else { return nil }
+        // Financial summaries are not individual trip evidence.
+        guard !lines.contains(where: { ["ganhos", "resumo dos ganhos", "detalhes dos ganhos", "estatisticas", "mais informacoes", "esta semana", "semana atual"].contains($0) }) else { return nil }
         var result = RadarPaymentEvidence()
         result.collection = lines.contains { $0 == "recolher pagamento" || $0 == "receber pagamento" }
         result.collected = lines.contains { $0 == "pagamento recolhido" || $0 == "pagamento recebido" || $0 == "pagamento confirmado" }
@@ -44,9 +46,9 @@ enum RadarPaymentParser {
         result.newTrip = result.accepted || result.inProgress
         result.explicitPaid = lines.contains { ["pagamento aprovado", "pagamento realizado", "pagamento confirmado", "pago pelo aplicativo", "pagamento feito pelo app"].contains($0) }
         guard result.collection || result.collected || result.finished || result.completionConfirmed || result.unpaid || result.newTrip || result.cancelled || result.explicitPaid else { return nil }
-        let cash = lines.contains { $0 == "dinheiro" || $0 == "forma de pagamento: dinheiro" || $0 == "pagamento em dinheiro" }
+        let cash = lines.contains { $0 == "dinheiro" || $0 == "forma de pagamento: dinheiro" || $0 == "pagamento em dinheiro" || ["pix pessoal", "credito na maquininha", "debito na maquininha", "cartao na maquininha"].contains($0) }
         let pix = lines.contains { $0 == "pix" || $0 == "forma de pagamento: pix" || $0 == "pix da uber" }
-        let app = lines.contains { $0 == "pagamento pelo app" || $0 == "pagamento no app" || $0 == "pago pelo aplicativo" || $0 == "pagamento feito pelo app" }
+        let app = lines.contains { $0 == "pagamento pelo app" || $0 == "pagamento no app" || $0 == "pago pelo aplicativo" || $0 == "pagamento feito pelo app" || $0 == "cartao pelo aplicativo" || $0 == "cartao pelo app" }
         result.paymentChoices = [cash, pix, app].filter({ $0 }).count > 1
         // Seeing both choice labels is not evidence of which button was tapped.
         if [cash, pix, app].filter({ $0 }).count == 1 {
@@ -82,7 +84,7 @@ enum RadarPaymentParser {
         let unique = Set(amounts)
         if let amount = finalAmount, amount > 0 { result.amount = amount; result.amountIsFinal = true }
         else if let amount = collectionAmount, amount > 0 { result.amount = amount }
-        else if result.driverEarnings == nil, unique.count == 1, let amount = unique.first, amount > 0 { result.amount = amount }
+        else if (result.collection || result.collected || result.explicitPaid), result.driverEarnings == nil, unique.count == 1, let amount = unique.first, amount > 0 { result.amount = amount }
         // An explicitly named earnings field can differ from cash collected.
         // Neither a fare offer nor an unlabeled second amount supplies this field.
         return result
