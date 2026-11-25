@@ -47,8 +47,8 @@ enum RadarPaymentParser {
         result.explicitPaid = lines.contains { ["pagamento aprovado", "pagamento realizado", "pagamento confirmado", "pago pelo aplicativo", "pagamento feito pelo app"].contains($0) }
         guard result.collection || result.collected || result.finished || result.completionConfirmed || result.unpaid || result.newTrip || result.cancelled || result.explicitPaid else { return nil }
         let cash = lines.contains { $0 == "dinheiro" || $0 == "forma de pagamento: dinheiro" || $0 == "pagamento em dinheiro" || ["pix pessoal", "credito na maquininha", "debito na maquininha", "cartao na maquininha"].contains($0) }
-        let pix = lines.contains { $0 == "pix" || $0 == "forma de pagamento: pix" || $0 == "pix da uber" }
-        let app = lines.contains { $0 == "pagamento pelo app" || $0 == "pagamento no app" || $0 == "pago pelo aplicativo" || $0 == "pagamento feito pelo app" || $0 == "cartao pelo aplicativo" || $0 == "cartao pelo app" }
+        let pix = lines.contains { $0 == "pix" || $0 == "forma de pagamento: pix" || $0 == "pix da uber" || $0 == "pix qr code uber" || $0 == "qr code uber" }
+        let app = lines.contains { $0 == "pagamento pelo app" || $0 == "pagamento no app" || $0 == "pago pelo aplicativo" || $0 == "pagamento feito pelo app" || $0 == "cartao pelo aplicativo" || $0 == "cartao pelo app" || $0 == "cartao pelo aplicativo uber" }
         result.paymentChoices = [cash, pix, app].filter({ $0 }).count > 1
         // Seeing both choice labels is not evidence of which button was tapped.
         if [cash, pix, app].filter({ $0 }).count == 1 {
@@ -235,7 +235,7 @@ struct RadarPaymentState: Codable {
             receipts[index].completedAt = receipts[index].completedAt ?? date
             receipts[index].phase = .completed
         }
-        if evidence.finished && !evidence.collection,
+        if (evidence.finished || receipts[index].completedAt != nil) && !evidence.collection,
            receipts[index].confirmationSeen, receipts[index].status != .unpaid,
            receipts[index].amount != nil, receipts[index].method != nil,
            receipts[index].amountConflict != true, paymentFresh {
