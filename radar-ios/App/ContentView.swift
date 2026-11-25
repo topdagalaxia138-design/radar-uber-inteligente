@@ -112,7 +112,6 @@ struct ContentView: View {
                     Spacer()
                     Button("Ver semana →") { selectedTab = 1 }.font(.subheadline.bold())
                 }
-                tripTrackingCard
                 financeGrid
                 NavigationLink { RadarOperationsView() } label: {
                     Label("Jornada, combustível e conciliação →", systemImage: "chart.line.uptrend.xyaxis")
@@ -174,6 +173,10 @@ struct ContentView: View {
                         .font(.subheadline.bold())
                     Spacer()
                     Text("Detalhes ›").font(.caption.bold())
+                }
+                if let total = tripProgress.total {
+                    ProgressView(value: Double(min(max(total, 0), 80)), total: 80).tint(.white)
+                    Text("Faltam \(tripProgress.remaining ?? 80) corridas").font(.caption.bold())
                 }
                 Text("Inclui lançamentos da carteira. Não some o aluguel novamente.")
                     .font(.caption2).foregroundStyle(.white.opacity(0.8))
@@ -251,6 +254,7 @@ struct ContentView: View {
                 if let amount {
                     Text(amount, format: .currency(code: "BRL"))
                         .font(.headline).monospacedDigit().minimumScaleFactor(0.7).lineLimit(1)
+                        .foregroundStyle(route == .earnings ? (amount < 0 ? Color.red : RadarPalette.green) : RadarPalette.ink)
                     Text(paymentCard ? "Confirmações capturadas • parcial" : (observation.map { stale($0) } == true ? "Última leitura • desatualizado" : "Valor lido na tela"))
                         .font(.caption2).foregroundStyle(.secondary)
                 } else {
@@ -414,21 +418,18 @@ struct ContentView: View {
                     } else {
                         Text("Nenhum recebimento confirmado capturado. Isso não significa que você recebeu zero.")
                     }
-                    Text(payments.message).font(.caption)
                     Text("Somente sequências legíveis de cobrança, confirmação e encerramento. Etapas perdidas ou ambíguas ficam pendentes; o histórico anterior não é reconstruído.")
                     Text(route == .cash ? "Dinheiro informado como recebido por você. Abastecimentos ainda não são descontados deste total."
                          : "Pix da Uber e pagamento no app confirmados na tela. Este total não é o abatimento exato da carteira.")
                 }
-                Section("Etapas capturadas") {
-                    let items = payments.receipts.sorted { $0.startedAt > $1.startedAt }
+                Section("Recebimentos") {
+                    let items = payments.receipts.filter { $0.status == .received && (route == .cash ? $0.method == .cash : $0.method == .uberPix || $0.method == .uberApp) }.sorted { $0.startedAt > $1.startedAt }
                     if items.isEmpty { Text("Aguardando uma sequência de pagamento.") }
                     ForEach(items.prefix(20)) { item in
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(item.phase?.label ?? "Etapa capturada").font(.caption.bold())
-                            if let reason = item.missingEvidence { Text(reason).font(.caption).foregroundStyle(.orange) }
                             Text(item.status == .received ? "Recebimento confirmado" : item.status == .unpaid ? "Não pagamento identificado" : "Recebimento pendente")
                                 .font(.headline)
-                            Text(item.method == .cash ? "Dinheiro" : item.method == .uberPix ? "Pix da Uber" : item.method == .uberApp ? "Pagamento no app" : "Forma não confirmada")
+                            Text(item.method == .cash ? "Dinheiro em espécie" : item.method == .uberPix ? "Pix QR Code da Uber" : item.method == .uberApp ? "Cartão pelo aplicativo Uber" : "Forma não confirmada")
                             if let amount = item.amount { Text(amount, format: .currency(code: "BRL")) }
                             Text(item.updatedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption)
                         }
