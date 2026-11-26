@@ -110,7 +110,9 @@ enum RadarFinanceParser {
                values[.weeklyTrips] != nil {
                 for (index, line) in lines.enumerated() where line.range(of: #"\d{1,2}\s+de\s+"#, options: .regularExpression) != nil
                     && (line.contains("-") || line.contains("–")) {
-                    let next = Array(lines.dropFirst(index + 1).prefix(3))
+                    // The overview wraps the end date on narrow iPhone screens.
+                    let continuation = index + 1 < lines.count && lines[index + 1].range(of: #"^de\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)"#, options: .regularExpression) != nil
+                    let next = Array(lines.dropFirst(index + (continuation ? 2 : 1)).prefix(3))
                     for candidate in next {
                         if let value = currency(candidate) { values[.weeklyEarnings] = value; break }
                     }
