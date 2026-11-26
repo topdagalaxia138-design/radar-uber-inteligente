@@ -4,7 +4,7 @@ enum RadarRuntimePolicy {
     static func frameInterval(thermalLevel: Int) -> Double {
         switch thermalLevel {
         case 1: return 1.2
-        case 2: return 2.0
+        case 2: return 1.2
         case 3: return .infinity
         default: return 0.6
         }
@@ -13,7 +13,7 @@ enum RadarRuntimePolicy {
 
     static func needsAccurateRead(offer: Bool, payment: Bool, finance: Bool,
                                   secondsSinceFallback: Double, thermalLevel: Int = 0) -> Bool {
-        offer || payment || finance || (thermalLevel < 2 && secondsSinceFallback >= 3)
+        offer || payment || finance || (thermalLevel < 3 && secondsSinceFallback >= 3)
     }
     static func canRetryFailedNotice(age: Double, secondsSinceFailure: Double, alreadyRetried: Bool) -> Bool {
         !alreadyRetried && age >= 0 && age < 6 && secondsSinceFailure >= 1
