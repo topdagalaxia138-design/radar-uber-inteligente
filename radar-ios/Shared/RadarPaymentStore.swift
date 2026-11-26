@@ -158,11 +158,12 @@ struct RadarPaymentState: Codable {
         let nextAccepted = evidence.accepted && lastEvidenceStage != "accepted"
             && current.map { receipts[$0].phase == .inProgress || receipts[$0].phase == .collecting } == true
         let expired = current.map { date.timeIntervalSince(receipts[$0].startedAt) >= 4 * 3600 } ?? false
+        let freshOffer = candidateOffer.map { date.timeIntervalSince($0.observedAt) >= 0 && date.timeIntervalSince($0.observedAt) <= 90 && $0.observedAt > (current.map { receipts[$0].updatedAt } ?? .distantPast) } ?? false
         let boundary = evidence.newTrip && (current == nil || terminal || nextAccepted || expired)
             && !(lastEvidenceStage == stage && terminal)
         // A repeated collection screen cannot establish a new trip after completion.
         // Require an observed new-trip boundary; otherwise preserve the existing receipt.
-        if boundary || (evidence.collection && current == nil) {
+        if boundary || (evidence.collection && (current == nil || (terminal && freshOffer && lastEvidenceStage == "idle"))) {
             if let i = current, !terminal { receipts[i].missingEvidence = "Fim da viagem anterior não observado; valores continuam pendentes" }
             var receipt = RadarReceipt(id: UUID().uuidString, startedAt: date, updatedAt: date)
             receipt.phase = evidence.inProgress ? .inProgress : evidence.accepted ? .accepted : .collecting
