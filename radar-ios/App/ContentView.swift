@@ -174,9 +174,20 @@ struct ContentView: View {
                     Spacer()
                     Text("Detalhes ›").font(.caption.bold())
                 }
+                HStack {
+                    Text("Meta semanal • 80 corridas").font(.caption.bold())
+                    Spacer()
+                    if let total = tripProgress.total {
+                        Text("\(Int(Double(min(max(total, 0), 80)) / 80 * 100))%").font(.caption.bold())
+                    }
+                }
                 if let total = tripProgress.total {
                     ProgressView(value: Double(min(max(total, 0), 80)), total: 80).tint(.white)
                     Text("Faltam \(tripProgress.remaining ?? 80) corridas").font(.caption.bold())
+                } else {
+                    Capsule().fill(Color.white.opacity(0.25)).frame(height: 6)
+                    Text("Abra Ganhos da semana na Uber com Radar Leitura ativo.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.85))
                 }
                 Text("Inclui lançamentos da carteira. Não some o aluguel novamente.")
                     .font(.caption2).foregroundStyle(.white.opacity(0.8))
