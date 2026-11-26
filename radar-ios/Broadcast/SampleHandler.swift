@@ -220,8 +220,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
             if fast == lastConfirmedFastText && readTime - lastConfirmedReadAt < 4 { return }
             // Payment/trip screens can contain a product and a price too.
             // An offer candidate must not crop away lifecycle evidence.
-            let hasOffer = RadarOfferParser.mightContainOffer(fast) && RadarPaymentParser.parse(fast) == nil
             let hasPayment = RadarPaymentParser.parse(fast) != nil
+            let hasOffer = RadarOfferParser.mightContainOffer(fast) && !hasPayment
             let hasFinance = RadarFinanceParser.mightContainFinancialScreen(fast)
             guard RadarRuntimePolicy.needsAccurateRead(offer: hasOffer, payment: hasPayment, finance: hasFinance,
                 secondsSinceFallback: ProcessInfo.processInfo.systemUptime - lastFallbackAt,
@@ -254,7 +254,9 @@ final class SampleHandler: RPBroadcastSampleHandler {
             }
             if RadarFinanceParser.mightContainFinancialScreen(initial) {
                 let firstText = initial
-                let secondText = try text(in: pixels, level: .accurate)
+                let fastFinance = RadarFinanceParser.parse(fast, now: now)
+                let initialFinance = RadarFinanceParser.parse(firstText, now: now)
+                let secondText = RadarFinanceState.confirmedReading(initialFinance, fastFinance) != nil ? fast : try text(in: pixels, level: .accurate)
                 let first = RadarFinanceParser.parse(firstText, now: now)
                 let second = RadarFinanceParser.parse(secondText, now: now)
                 let message: String
