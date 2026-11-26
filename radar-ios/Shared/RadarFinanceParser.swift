@@ -88,8 +88,9 @@ enum RadarFinanceParser {
         if earningsPage && currentWeek && selectedDayAmbiguity {
             values[.visibleTrips] = tripCount(in: lines)
         }
-        // An explicitly labeled weekly total is independent of chart-day statistics.
-        if earningsPage && currentWeek {
+        // A complete earnings breakdown can establish the total; a selected chart day cannot.
+        let completeBreakdown = lines.contains("preco liquido") && lines.contains("outros ganhos") && lines.contains("outras taxas")
+        if earningsPage && currentWeek && (!selectedDayAmbiguity || completeBreakdown) {
             values[.weeklyEarnings] = money(after: ["ganhos totais", "total de ganhos"], in: lines)
         }
         if earningsPage && currentWeek && !selectedDayAmbiguity {
