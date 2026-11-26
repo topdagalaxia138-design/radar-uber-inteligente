@@ -88,8 +88,12 @@ enum RadarFinanceParser {
         if earningsPage && currentWeek && selectedDayAmbiguity {
             values[.visibleTrips] = tripCount(in: lines)
         }
+        // An explicitly labeled weekly total is independent of chart-day statistics.
+        if earningsPage && currentWeek {
+            values[.weeklyEarnings] = money(after: ["ganhos totais", "total de ganhos"], in: lines)
+        }
         if earningsPage && currentWeek && !selectedDayAmbiguity {
-            values[.weeklyEarnings] = money(after: ["ganhos liquidos", "total de ganhos", "ganhos totais", "ganhos"], in: lines)
+            values[.weeklyEarnings] = values[.weeklyEarnings] ?? money(after: ["ganhos liquidos", "ganhos"], in: lines)
             values[.weeklyTrips] = tripCount(in: lines)
             if values[.weeklyEarnings] == nil, lines.contains("estatisticas"),
                values[.weeklyTrips] != nil {
