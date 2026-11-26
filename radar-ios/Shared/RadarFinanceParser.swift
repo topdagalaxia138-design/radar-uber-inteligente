@@ -89,12 +89,11 @@ enum RadarFinanceParser {
             values[.visibleTrips] = tripCount(in: lines)
         }
         // A complete earnings breakdown can establish the total; a selected chart day cannot.
-        let completeBreakdown = lines.contains("preco liquido") && lines.contains("outros ganhos") && lines.contains("outras taxas")
-        if earningsPage && currentWeek && (!selectedDayAmbiguity || completeBreakdown) {
+        if earningsPage && currentWeek && !selectedDayAmbiguity {
             values[.weeklyEarnings] = money(after: ["ganhos totais", "total de ganhos"], in: lines)
         }
         if earningsPage && currentWeek && !selectedDayAmbiguity {
-            values[.weeklyEarnings] = values[.weeklyEarnings] ?? money(after: ["ganhos liquidos", "ganhos"], in: lines)
+            values[.weeklyEarnings] = values[.weeklyEarnings] ?? money(after: ["ganhos liquidos"], in: lines)
             values[.weeklyTrips] = tripCount(in: lines)
             if values[.weeklyEarnings] == nil, lines.contains("estatisticas"),
                values[.weeklyTrips] != nil {
@@ -106,7 +105,7 @@ enum RadarFinanceParser {
                 }
             }
             // Overview is weekly; a selected day on the chart is not.
-            if values[.weeklyEarnings] == nil, lines.contains("mais informacoes"),
+            if lines.contains("mais informacoes"),
                values[.weeklyTrips] != nil {
                 for (index, line) in lines.enumerated() where line.range(of: #"\d{1,2}\s+de\s+"#, options: .regularExpression) != nil
                     && (line.contains("-") || line.contains("–")) {
@@ -119,6 +118,7 @@ enum RadarFinanceParser {
                     if values[.weeklyEarnings] != nil { break }
                 }
             }
+            values[.weeklyEarnings] = values[.weeklyEarnings] ?? money(after: ["ganhos"], in: lines)
             values[.cashReceived] = money(after: ["dinheiro recebido", "recebido em dinheiro"], in: lines)
             values[.digitalEarnings] = money(after: ["ganhos em pagamentos digitais", "ganhos digitais"], in: lines)
             values[.rentalRetained] = money(after: ["valor retido para aluguel", "aluguel retido"], in: lines)
