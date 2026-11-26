@@ -291,13 +291,13 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 return
             }
             let elapsed = ProcessInfo.processInfo.systemUptime - started
-            guard elapsed < 2.0 else {
-                status("Leitura demorou mais de 2 segundos; aviso descartado para evitar atraso", forOfferAttempt: true)
-                RadarEnvironment.readingStore?.update { $0.runtimeEvent("late_read", "Aviso não enviado: leitura acima de 2 segundos") }
+            guard elapsed < 5.0 else {
+                status("Leitura demorou 5 segundos ou mais; aviso descartado para evitar atraso", forOfferAttempt: true)
+                RadarEnvironment.readingStore?.update { $0.runtimeEvent("late_read", "Aviso não enviado: leitura de 5 segundos ou mais") }
                 return
             }
             RadarEnvironment.paymentStore?.observeOffer(offer, at: now)
-            evaluate(offer)
+            evaluate(offer, deadline: now.addingTimeInterval(7))
             lastConfirmedFastText = fast; lastConfirmedReadAt = readTime
         } catch {
             status("Falha do OCR; tentando novamente no próximo quadro")
@@ -305,7 +305,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
     }
 
-    private func evaluate(_ offer: RadarOffer) {
+    private func evaluate(_ offer: RadarOffer, deadline: Date) {
         let defaults = RadarEnvironment.sharedDefaults
         guard let price = defaults?.double(forKey: "fuelPricePerLiter"), price > 0,
               let consumption = defaults?.double(forKey: "fuelKilometersPerLiter"),
@@ -358,10 +358,10 @@ final class SampleHandler: RPBroadcastSampleHandler {
         defaults?.set(now.timeIntervalSince1970, forKey: "lastOfferAt")
         RadarEnvironment.readingStore?.update { $0.beginDecision(record); $0.runtimeEvent("decision", notice.title) }
         status(notice.title, forOfferAttempt: true)
-        if notice.accepted { deliver(notice, recordID: record.id, offerLabel: offerLabel) }
+        if notice.accepted { deliver(notice, recordID: record.id, offerLabel: offerLabel, deadline: deadline) }
     }
 
-    private func deliver(_ notice: RadarDecisionNotice, recordID: String, offerLabel: String) {
+    private func deliver(_ notice: RadarDecisionNotice, recordID: String, offerLabel: String, deadline: Date) {
         let content = UNMutableNotificationContent()
         content.categoryIdentifier = RadarNotifications.offerCategory
         content.sound = .default
@@ -382,7 +382,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 }
                 return
             }
-            guard Date().timeIntervalSince(submittedAt) < 2.5,
+            guard Date() < deadline, Date().timeIntervalSince(submittedAt) < 2.5,
                   RadarEnvironment.readingStore?.load()?.phase == "running" else {
                 RadarEnvironment.readingStore?.update {
                     $0.markNotice(recordID: recordID, error: "Envio atrasado ou transmissão encerrada", at: Date())
