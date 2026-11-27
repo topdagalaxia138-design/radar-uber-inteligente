@@ -7,7 +7,7 @@ struct RadarDecisionNotice {
     let body: String
     let accepted: Bool
 
-    init?(_ decision: RadarDecision, destination: String?) {
+    init?(_ decision: RadarDecision, destination: String?, strategy: String? = nil) {
         let reason: String
         let net: Double
         let hourly: Double
@@ -24,7 +24,7 @@ struct RadarDecisionNotice {
         }
         title = caution ? "🟡 RADAR • ATENÇÃO" : accepted ? "🟢 RADAR • PEGAR" : "🔴 RADAR • NÃO PEGAR"
         subtitle = String(format: "Após combustível R$ %.2f • R$ %.2f/min", net, hourly / 60)
-        body = reason + (destination.map { "\nDestino: " + $0 } ?? "")
+        body = reason + (destination.map { "\nDestino: " + $0 } ?? "") + (strategy.map { "\n" + $0 } ?? "")
     }
 }
 
