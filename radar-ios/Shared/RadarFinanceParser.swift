@@ -111,7 +111,7 @@ enum RadarFinanceParser {
                     && (line.contains("-") || line.contains("–")) {
                     // The overview wraps the end date on narrow iPhone screens.
                     let continuation = index + 1 < lines.count && lines[index + 1].range(of: #"^de\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)"#, options: .regularExpression) != nil
-                    let next = Array(lines.dropFirst(index + (continuation ? 2 : 1)).prefix(3))
+                    let next = Array(lines.dropFirst(index + (continuation ? 2 : 1)).prefix(6))
                     for candidate in next {
                         if let value = currency(candidate) { values[.weeklyEarnings] = value; break }
                     }
@@ -227,11 +227,12 @@ enum RadarFinanceParser {
         if let labeled = count(after: ["viagens", "viagens concluidas", "corridas concluidas"], in: lines) {
             values.append(labeled)
         }
-        let expression = try! NSRegularExpression(pattern: #"^(\d{1,4})\s+viagens$"#)
+        let expression = try! NSRegularExpression(pattern: #"(?<![\d.,])(\d{1,4})\s+viagens\b"#)
         for line in lines {
             let source = line as NSString
-            if let match = expression.firstMatch(in: line, range: NSRange(location: 0, length: source.length)),
-               let value = Double(source.substring(with: match.range(at: 1))) { values.append(value) }
+            for match in expression.matches(in: line, range: NSRange(location: 0, length: source.length)) {
+                if let value = Double(source.substring(with: match.range(at: 1))) { values.append(value) }
+            }
         }
         let unique = Set(values)
         return unique.count == 1 ? unique.first : nil
