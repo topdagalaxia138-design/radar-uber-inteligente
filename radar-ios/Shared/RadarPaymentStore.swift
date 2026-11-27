@@ -109,9 +109,11 @@ struct RadarTripOfferSnapshot: Codable, Equatable {
     let fare: Double
     let minutes: Double
     let kilometers: Double
+    var destinationCity: String? = nil
     init?(_ offer: RadarOffer, at date: Date) {
         guard let minutes = offer.totalMinutes, let kilometers = offer.totalKilometers else { return nil }
         self.observedAt = date; self.fare = offer.fare; self.minutes = minutes; self.kilometers = kilometers
+        self.destinationCity = RadarAdaptiveHistory.city(in: offer.destination)
     }
 }
 
