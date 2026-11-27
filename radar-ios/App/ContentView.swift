@@ -113,6 +113,7 @@ struct ContentView: View {
                     Button("Ver semana →") { selectedTab = 1 }.font(.subheadline.bold())
                 }
                 financeGrid
+                strategyCard
                 NavigationLink { RadarOperationsView() } label: {
                     Label("Jornada, combustível e conciliação →", systemImage: "chart.line.uptrend.xyaxis")
                         .font(.subheadline.bold()).frame(maxWidth: .infinity, alignment: .leading)
@@ -123,6 +124,45 @@ struct ContentView: View {
                     .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4)
             }.padding(20)
         }.background(RadarPalette.canvas.ignoresSafeArea())
+    }
+
+    private var strategyCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("ESTRATÉGIA RADAR", systemImage: "chart.line.uptrend.xyaxis")
+                .font(.headline).foregroundStyle(RadarPalette.green)
+            if let cycle = RadarPassStrategy.activeCycle(movements: finance.movements ?? [], receipts: payments.receipts, now: clock) {
+                Text("Passe • ciclo de 24 horas").font(.headline)
+                Text("Vence: " + cycle.expiresAt.formatted(date: .abbreviated, time: .shortened))
+                Text("Custo: " + cycle.cost.formatted(.currency(code: "BRL")))
+                ProgressView(value: min(cycle.confirmedEarnings, cycle.cost), total: cycle.cost)
+                Text("Ganhos identificados: " + cycle.confirmedEarnings.formatted(.currency(code: "BRL")))
+                Text("Falta recuperar pelos ganhos identificados: " + cycle.remainingToRecover.formatted(.currency(code: "BRL")))
+                    .font(.caption)
+                Text("Registro parcial; não representa saldo da carteira.").font(.caption2).foregroundStyle(.secondary)
+            } else {
+                Text("Passe ativo não confirmado pela leitura da carteira.").font(.caption)
+            }
+            Divider()
+            Text("Rentabilidade por cidade de destino").font(.headline)
+            if let data = RadarEnvironment.sharedDefaults?.data(forKey: "observedRateHistory"),
+               let history = try? JSONDecoder().decode(RadarAdaptiveHistory.self, from: data) {
+                let windows = history.regionalWindows(now: clock)
+                if windows.isEmpty {
+                    Text("Aprendendo com as ofertas; aguardando amostras suficientes.").font(.caption)
+                }
+                ForEach(Array(windows.prefix(5).enumerated()), id: \.offset) { item in
+                    let window = item.element
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(window.city + " • " + String(format: "%02d:00", window.hour)).font(.subheadline.bold())
+                        Text("Dia: " + Calendar.current.weekdaySymbols[window.weekday - 1] + " • " + String(window.count) + " ofertas").font(.caption)
+                        Text(window.medianEstimatedNetPerHour.formatted(.currency(code: "BRL")) + "/h estimados após combustível").font(.caption)
+                    }
+                }
+            } else {
+                Text("Aguardando histórico de ofertas.").font(.caption)
+            }
+            Text("Ofertas observadas não comprovam demanda, lucro real ou retorno com passageiro.").font(.caption2).foregroundStyle(.secondary)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(18).cardSurface()
     }
 
     @ViewBuilder private var tripTrackingCard: some View {
