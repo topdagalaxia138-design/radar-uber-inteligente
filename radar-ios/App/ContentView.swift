@@ -30,6 +30,9 @@ struct ContentView: View {
     @AppStorage("fuelPricePerLiter", store: RadarEnvironment.sharedDefaults) private var price = 0.0
     @AppStorage("fuelKilometersPerLiter", store: RadarEnvironment.sharedDefaults) private var consumption = 9.0
     @AppStorage("targetNetPerHour", store: RadarEnvironment.sharedDefaults) private var target = 0.0
+    @AppStorage("vehicleOwnership", store: RadarEnvironment.sharedDefaults) private var ownership = RadarVehicleOwnership.rented.rawValue
+    @AppStorage("weeklyRentalPlan", store: RadarEnvironment.sharedDefaults) private var rental = 832.22
+    @AppStorage("monthlyVehicleBudget", store: RadarEnvironment.sharedDefaults) private var vehicleBudget = 0.0
     @State private var selectedTab = 0
     @State private var panel: RadarPanel?
     @State private var finance = RadarFinanceState()
@@ -105,6 +108,7 @@ struct ContentView: View {
                 }.foregroundStyle(RadarPalette.green)
 
                 weekHero
+                vehicleCard
                 monitorCard
                 if reading?.decisionRecord != nil { lastDecision }
                 HStack {
@@ -124,6 +128,28 @@ struct ContentView: View {
                     .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4)
             }.padding(20)
         }.background(RadarPalette.canvas.ignoresSafeArea())
+    }
+
+    private var vehicleCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Seu veículo", systemImage: "car.side.fill").font(.headline)
+                Spacer()
+                Picker("Seu veículo", selection: $ownership) {
+                    ForEach(RadarVehicleOwnership.allCases, id: \.rawValue) { item in
+                        Text(item.label).tag(item.rawValue)
+                    }
+                }.labelsHidden().pickerStyle(.menu)
+            }
+            HStack {
+                Text(ownership == RadarVehicleOwnership.rented.rawValue ? "Aluguel semanal previsto" : "Custos fixos mensais")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Text((ownership == RadarVehicleOwnership.rented.rawValue ? rental : vehicleBudget).formatted(.currency(code: "BRL"))).font(.subheadline.bold())
+            }
+            Button("Ajustar custos e planejamento") { selectedTab = 1 }
+                .font(.caption.bold()).foregroundStyle(RadarPalette.green)
+        }.padding(18).cardSurface()
     }
 
     private var strategyCard: some View {
