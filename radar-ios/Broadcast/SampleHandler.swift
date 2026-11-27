@@ -322,7 +322,16 @@ final class SampleHandler: RPBroadcastSampleHandler {
             targetNetPerHour: adaptiveTarget, preferredMinimumFare: 25)
         settings.idleMinutes = max(0, defaults?.double(forKey: "confirmedIdleMinutes") ?? 0)
         let decision = RadarDecisionEngine.evaluate(offer, settings: settings)
-        guard let notice = RadarDecisionNotice(decision, destination: offer.destination) else {
+        var strategy: String?
+        if let minutes = offer.totalMinutes, let km = offer.totalKilometers,
+           let tripKm = offer.tripKilometers,
+           let allowance = RadarRealizedStrategy.affordableEmptyMinutes(fare: offer.fare, tripMinutes: minutes,
+                tripKm: km, emptyKm: tripKm, fuelPerKm: fuel, targetPerHour: adaptiveTarget) {
+            strategy = allowance < 0
+                ? "Retorno vazio de mesma distância compromete a meta."
+                : String(format: "Retorno vazio de mesma distância: até %.0f min para manter a meta.", allowance)
+        }
+        guard let notice = RadarDecisionNotice(decision, destination: offer.destination, strategy: strategy) else {
             if case .insufficient(let reason) = decision {
                 status("Oferta confirmada, sem recomendação: " + reason, forOfferAttempt: true)
             }
