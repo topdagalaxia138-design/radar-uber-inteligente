@@ -8,6 +8,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var history = RadarAdaptiveHistory()
     private var lastFrameAt = -Double.infinity
     private var lastFingerprint: UInt64?
+    private var lastOCRAt = -Double.infinity
     private var lastFallbackAt = -Double.infinity
     private var lastConfirmedFastText: String?
     private var lastConfirmedReadAt = -Double.infinity
@@ -33,6 +34,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         gate = RadarOfferGate()
         lastFrameAt = -Double.infinity
         lastFingerprint = nil
+        lastOCRAt = -Double.infinity
         lastFallbackAt = -Double.infinity
         lastConfirmedFastText = nil
         lastConfirmedReadAt = -Double.infinity
@@ -102,6 +104,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         if stoppedForHeat {
             stoppedForHeat = false
             lastFingerprint = nil
+        lastOCRAt = -Double.infinity
             lastConfirmedFastText = ""
             lastFrameAt = -Double.infinity
             RadarEnvironment.readingStore?.update {
@@ -118,7 +121,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         guard now - lastFrameAt >= RadarRuntimePolicy.frameInterval(thermalLevel: level),
               let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let fingerprint = frameFingerprint(pixels)
-        if fingerprint != nil && fingerprint == lastFingerprint && now - lastFrameAt < 1.5 {
+        if fingerprint != nil && fingerprint == lastFingerprint && now - lastOCRAt < 3.0 {
             skippedFrames += 1
             if now - heartbeatAt >= 1 {
                 heartbeatAt = now
@@ -133,6 +136,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
         lastFrameAt = now
         lastFingerprint = fingerprint
+        lastOCRAt = now
         // Rest is measured after OCR finishes, preventing back-to-back expensive reads.
         defer { lastFrameAt = ProcessInfo.processInfo.systemUptime }
         autoreleasepool { process(pixels) }
@@ -166,11 +170,11 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
         guard width > 0, height > 0, let data = bytes?.assumingMemoryBound(to: UInt8.self) else { return nil }
         var hash: UInt64 = 1469598103934665603
-        for row in 0..<32 {
-            let y = min(height - 1, height / 5 + row * (height * 4 / 5) / 32)
-            for column in 0..<24 {
-                let x = min(width - 1, column * width / 24)
-                let value = data[y * stride + x * channels + (channels == 4 ? 1 : 0)] >> 4
+        for row in 0..<48 {
+            let y = min(height - 1, row * height / 48)
+            for column in 0..<32 {
+                let x = min(width - 1, column * width / 32)
+                let value = data[y * stride + x * channels + (channels == 4 ? 1 : 0)] >> 2
                 hash = (hash ^ UInt64(value)) &* 1099511628211
             }
         }
@@ -230,7 +234,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
             if fast == lastConfirmedFastText && readTime - lastConfirmedReadAt < 4 { return }
             // Payment/trip screens can contain a product and a price too.
             // An offer candidate must not crop away lifecycle evidence.
-            let hasPayment = RadarPaymentParser.parse(fast) != nil
+            let fastPayment = RadarPaymentParser.parse(fast)
+            let hasPayment = fastPayment != nil
             let hasOffer = RadarOfferParser.mightContainOffer(fast) && !hasPayment
             let hasFinance = RadarFinanceParser.mightContainFinancialScreen(fast)
             guard RadarRuntimePolicy.needsAccurateRead(offer: hasOffer, payment: hasPayment, finance: hasFinance,
@@ -243,8 +248,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 region: hasOffer ? CGRect(x: 0, y: 0, width: 1, height: 0.82)
                                  : CGRect(x: 0, y: 0, width: 1, height: 1))
             if let firstPayment = RadarPaymentParser.parse(initial) {
-                let verification = fast
-                let verifiedPayment = firstPayment == RadarPaymentParser.parse(verification) ? firstPayment : RadarPaymentParser.parse(try text(in: pixels, level: .accurate))
+                let verifiedPayment = firstPayment == fastPayment ? firstPayment : RadarPaymentParser.parse(try text(in: pixels, level: .accurate))
                 if firstPayment == verifiedPayment {
                     let saved = RadarEnvironment.paymentStore?.observe(firstPayment, at: now) == true
                     if saved { lastConfirmedFastText = fast; lastConfirmedReadAt = readTime }
@@ -263,12 +267,9 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 return
             }
             if RadarFinanceParser.mightContainFinancialScreen(initial) {
-                let firstText = initial
+                let first = RadarFinanceParser.parse(initial, now: now)
                 let fastFinance = RadarFinanceParser.parse(fast, now: now)
-                let initialFinance = RadarFinanceParser.parse(firstText, now: now)
-                let secondText = RadarFinanceState.confirmedReading(initialFinance, fastFinance) != nil ? fast : try text(in: pixels, level: .accurate)
-                let first = RadarFinanceParser.parse(firstText, now: now)
-                let second = RadarFinanceParser.parse(secondText, now: now)
+                let second = RadarFinanceState.confirmedReading(first, fastFinance) != nil ? fastFinance : RadarFinanceParser.parse(try text(in: pixels, level: .accurate), now: now)
                 let message: String
                 if let reading = RadarFinanceState.confirmedReading(first, second),
                    ProcessInfo.processInfo.systemUptime - started < 7 {
