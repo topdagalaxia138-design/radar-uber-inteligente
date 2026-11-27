@@ -8,7 +8,8 @@ struct RadarWeeklyPlanView: View {
 
     @AppStorage("vehicleOwnership", store: RadarEnvironment.sharedDefaults) private var ownership = RadarVehicleOwnership.rented.rawValue
     @AppStorage("monthlyVehicleBudget", store: RadarEnvironment.sharedDefaults) private var vehicleBudget = 0.0
-    @FocusState private var editingNumber: Bool
+    private enum NumberField: Hashable { case rental, vehicle, goal }
+    @FocusState private var editingNumber: NumberField?
     @State private var finance = RadarFinanceState()
     @State private var payments = RadarPaymentState()
     @State private var clock = Date()
@@ -35,12 +36,12 @@ struct RadarWeeklyPlanView: View {
                     Text("Aluguel previsto por semana")
                     Spacer()
                     TextField("Aluguel", value: $rental, format: .number)
-                        .focused($editingNumber).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 100)
+                        .focused($editingNumber, equals: .rental).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 100)
                 }
                 } else {
                     LabeledContent("Custos fixos do carro por mês") {
                         TextField("R$", value: $vehicleBudget, format: .number)
-                            .focused($editingNumber).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 100)
+                            .focused($editingNumber, equals: .vehicle).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 100)
                     }
                     Text("Inclua os custos que você paga, como seguro e parcela. É planejamento, não uma cobrança nem lucro confirmado.").font(.caption)
                 }
@@ -49,7 +50,7 @@ struct RadarWeeklyPlanView: View {
                     Text("Meta pessoal por mês")
                     Spacer()
                     TextField("1000", value: $monthlyGoal, format: .number)
-                        .focused($editingNumber).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 100)
+                        .focused($editingNumber, equals: .goal).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 100)
                 }
                 Stepper("Dias planejados por semana: \(days)", value: $days, in: 1...7)
                 Stepper("Horas planejadas por dia: \(Int(hours))", value: $hours, in: 1...6, step: 1)
@@ -147,11 +148,17 @@ struct RadarWeeklyPlanView: View {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
-        .scrollDismissesKeyboard(.interactively)
+        .scrollDismissesKeyboard(.immediately)
+        .simultaneousGesture(TapGesture().onEnded {
+            if editingNumber != nil { editingNumber = nil }
+        }, including: .gesture)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if editingNumber != nil { Button("Concluir") { editingNumber = nil } }
+            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Concluir") { editingNumber = false }
+                Button("Concluir") { editingNumber = nil }
             }
         }
         .scrollContentBackground(.hidden)
